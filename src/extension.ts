@@ -33,9 +33,19 @@ export function activate(context: vscode.ExtensionContext): void {
 
   // Sidebar tree view — also derives from the store.
   tree = new ServicesTreeProvider(store);
-  context.subscriptions.push(
-    vscode.window.registerTreeDataProvider('devupServices', tree),
-  );
+  const treeView = vscode.window.createTreeView('devupServices', { treeDataProvider: tree });
+  context.subscriptions.push(treeView);
+
+  // Crash badge on the activity bar icon — count of crashed services.
+  // Cleared automatically when none are crashed.
+  const updateBadge = () => {
+    const crashed = store!.getAll().filter(s => s.status === 'crashed');
+    treeView.badge = crashed.length
+      ? { value: crashed.length, tooltip: `${crashed.length} service${crashed.length === 1 ? '' : 's'} crashed` }
+      : undefined;
+  };
+  context.subscriptions.push(store.onDidChange(updateBadge));
+  updateBadge();
 
   // Maintain a context key that menu `when` clauses can branch on.
   // Updated whenever the store's connection state changes.
