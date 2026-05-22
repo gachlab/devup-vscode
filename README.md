@@ -23,6 +23,8 @@ Talks to a running devup daemon via its Unix-socket control plane — no separat
 | Group services by boot phase (`devup.treeView.groupBy`) | 0.3.0 |
 | Flat list mode (no grouping) | 0.3.0 |
 | Profile picker — filter tree to a config profile | 0.3.0 |
+| Stats per service (CPU% · mem) in tree + system totals in status bar | 0.4.0 |
+| Proxy-aware URLs in "Open in browser" (Traefik / Caddy / nginx) | 0.4.0 |
 | Resolves local `node_modules` devup before global install | 0.2.1 |
 
 ## How it works
@@ -47,7 +49,7 @@ All data (service status, health, phase, profiles) comes exclusively from the da
 ## Requirements
 
 - VS Code ≥ 1.85
-- [@gachlab/devup](https://www.npmjs.com/package/@gachlab/devup) **≥ 0.10.1** running locally (the extension uses the `info` and `stats` RPC methods added in that release).
+- [@gachlab/devup](https://www.npmjs.com/package/@gachlab/devup) **≥ 0.10.1** running locally (uses `info`, `stats`, and `proxy` RPC methods).
 - Linux or macOS. Windows is not yet supported by the devup daemon.
 
 ## Install

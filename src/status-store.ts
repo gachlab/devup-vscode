@@ -18,6 +18,25 @@ export interface ProjectInfo {
   profiles: Record<string, string[]>;
 }
 
+export interface ProxyInfo {
+  active: boolean;
+  provider: string;
+  domain: string;
+  tls: boolean;
+  routes: Record<string, string>;
+}
+
+export interface ServiceStats {
+  cpu: number;   // percent
+  memMB: number;
+}
+
+export interface SystemStats {
+  totalMemMB: number;
+  freeMemMB: number;
+  cpuCores: number;
+}
+
 export type ConnectionState = 'connecting' | 'connected' | 'unreachable';
 
 /** Single source of truth for service state. Consumes `status.follow` from the
@@ -27,8 +46,12 @@ export type ConnectionState = 'connecting' | 'connected' | 'unreachable';
 export class StatusStore implements vscode.Disposable {
   private readonly services = new Map<string, ServiceSnapshot>();
   private info: ProjectInfo = { project: '', profiles: {} };
+  private proxy: ProxyInfo | null = null;
+  private readonly serviceStats = new Map<string, ServiceStats>();
+  private systemStats: SystemStats | null = null;
   private subscription: Subscription | null = null;
   private reconnectTimer: NodeJS.Timeout | null = null;
+  private statsTimer: NodeJS.Timeout | null = null;
   private state: ConnectionState = 'connecting';
   private readonly emitter = new vscode.EventEmitter<void>();
   readonly onDidChange = this.emitter.event;
@@ -40,11 +63,12 @@ export class StatusStore implements vscode.Disposable {
     void this.connect();
   }
 
-  getAll(): ServiceSnapshot[] {
-    return [...this.services.values()];
-  }
+  getAll(): ServiceSnapshot[] { return [...this.services.values()]; }
   getState(): ConnectionState { return this.state; }
   getInfo(): ProjectInfo { return this.info; }
+  getProxy(): ProxyInfo | null { return this.proxy; }
+  getServiceStats(name: string): ServiceStats | null { return this.serviceStats.get(name) ?? null; }
+  getSystemStats(): SystemStats | null { return this.systemStats; }
 
   private async connect(): Promise<void> {
     if (this.disposed) return;
@@ -55,14 +79,16 @@ export class StatusStore implements vscode.Disposable {
     // and surfaces errors before opening the streaming subscription.
     try {
       const [snapshot, infoResult] = await Promise.all([
-        sendRpc(this.socketPath, 'status', {}, { timeoutMs: 2000 }) as Promise<{ services: ServiceSnapshot[] }>,
+        sendRpc(this.socketPath, 'status', {}, { timeoutMs: 2000 }) as Promise<{ services: ServiceSnapshot[]; proxy: ProxyInfo | null }>,
         sendRpc(this.socketPath, 'info', {}, { timeoutMs: 2000 }).catch(() => null) as Promise<ProjectInfo | null>,
       ]);
       this.services.clear();
       for (const s of snapshot.services ?? []) this.services.set(s.name, s);
+      this.proxy = snapshot.proxy ?? null;
       if (infoResult) this.info = infoResult;
       this.state = 'connected';
       this.emitter.fire();
+      this.startStatsPolling();
     } catch {
       this.state = 'unreachable';
       this.services.clear();
@@ -85,11 +111,40 @@ export class StatusStore implements vscode.Disposable {
     );
   }
 
+  private startStatsPolling(): void {
+    this.stopStatsPolling();
+    const poll = async () => {
+      if (this.state !== 'connected') return;
+      try {
+        const result = await sendRpc(this.socketPath, 'stats', {}, { timeoutMs: 3000 }) as {
+          services: Record<string, ServiceStats>;
+          system: SystemStats;
+        };
+        this.serviceStats.clear();
+        for (const [name, s] of Object.entries(result.services ?? {})) {
+          this.serviceStats.set(name, s);
+        }
+        this.systemStats = result.system ?? null;
+        this.emitter.fire();
+      } catch { /* core < 0.10.0 or transient — degrade gracefully */ }
+    };
+    void poll();
+    this.statsTimer = setInterval(() => void poll(), 3000);
+  }
+
+  private stopStatsPolling(): void {
+    if (this.statsTimer) { clearInterval(this.statsTimer); this.statsTimer = null; }
+    this.serviceStats.clear();
+    this.systemStats = null;
+  }
+
   private onConnectionLost(): void {
     if (this.disposed) return;
     this.subscription = null;
     this.state = 'unreachable';
     this.services.clear();
+    this.proxy = null;
+    this.stopStatsPolling();
     this.emitter.fire();
     this.scheduleReconnect();
   }
@@ -105,6 +160,7 @@ export class StatusStore implements vscode.Disposable {
   dispose(): void {
     this.disposed = true;
     if (this.reconnectTimer) clearTimeout(this.reconnectTimer);
+    this.stopStatsPolling();
     this.subscription?.close();
     this.emitter.dispose();
   }
