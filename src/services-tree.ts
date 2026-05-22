@@ -1,6 +1,8 @@
 import * as vscode from 'vscode';
 import type { StatusStore, ServiceSnapshot } from './status-store.js';
 import { formatCpu, formatMem } from './url-builder.js';
+import { buildPhaseGroups } from './tree-logic.js';
+export { buildPhaseGroups };
 
 type Node =
   | { kind: 'group'; label: string; services: ServiceSnapshot[] }
@@ -84,19 +86,6 @@ export class ServicesTreeProvider implements vscode.TreeDataProvider<Node> {
   }
 }
 
-function buildPhaseGroups(services: ServiceSnapshot[]): Node[] {
-  const byPhase = new Map<number, ServiceSnapshot[]>();
-  for (const svc of services) {
-    const ph = svc.phase ?? 0;
-    if (!byPhase.has(ph)) byPhase.set(ph, []);
-    byPhase.get(ph)!.push(svc);
-  }
-  return [...byPhase.keys()].sort((a, b) => a - b).map(ph => ({
-    kind: 'group' as const,
-    label: `phase ${ph}`,
-    services: byPhase.get(ph)!.sort(byName),
-  }));
-}
 
 function groupIcon(label: string): vscode.ThemeIcon {
   if (label === 'APIs') return new vscode.ThemeIcon('server');

@@ -4,24 +4,10 @@ import type { StatusStore, ServiceSnapshot } from './status-store.js';
 import { buildServiceUrl } from './url-builder.js';
 import type { LogChannels } from './log-channels.js';
 
-type ServiceArg = string | Record<string, unknown> | undefined;
+import { extractSvcName } from './svc-name.js';
+export { extractSvcName };
 
-/** Extract the service name from any form a command argument can take:
- *  - plain string (from item.command.arguments)
- *  - tree Node { kind: 'service', svc: ServiceSnapshot } (from context menu)
- *  - legacy { svc: string } or { name: string } shapes */
-function extractSvcName(arg: ServiceArg): string | null {
-  if (typeof arg === 'string') return arg;
-  if (arg && typeof arg === 'object') {
-    // Tree node: { kind: 'service', svc: ServiceSnapshot }
-    if (arg['kind'] === 'service' && arg['svc'] && typeof (arg['svc'] as Record<string, unknown>)['name'] === 'string') {
-      return (arg['svc'] as Record<string, unknown>)['name'] as string;
-    }
-    if (typeof arg['svc'] === 'string') return arg['svc'];
-    if (typeof arg['name'] === 'string') return arg['name'];
-  }
-  return null;
-}
+type ServiceArg = string | Record<string, unknown> | undefined;
 
 async function resolveServiceName(arg: ServiceArg, store: StatusStore, prompt: string): Promise<string | null> {
   const name = extractSvcName(arg);
