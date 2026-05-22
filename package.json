@@ -2,7 +2,7 @@
   "name": "devup-vscode",
   "displayName": "devup",
   "description": "Sidebar tree, status bar, and live logs for @gachlab/devup — control your dev stack without leaving the editor.",
-  "version": "0.2.1",
+  "version": "0.3.0",
   "publisher": "gachlab",
   "license": "MIT",
   "engines": {
@@ -51,9 +51,32 @@
           "type": "string",
           "default": "",
           "description": "Path to devup executable. If empty, uses 'npx devup' which searches node_modules first, then global PATH."
+        },
+        "devup.treeView.groupBy": {
+          "type": "string",
+          "enum": ["type", "phase", "none"],
+          "enumDescriptions": [
+            "Group by service type (APIs / Webs) — default",
+            "Group by boot phase (phase 0, phase 1, …)",
+            "Flat list — no grouping"
+          ],
+          "default": "type",
+          "description": "How to group services in the sidebar tree."
+        },
+        "devup.profile": {
+          "type": "string",
+          "default": "",
+          "description": "Active profile filter. When set, only services belonging to this profile are shown. Leave empty to show all services."
         }
       }
     },
+    "viewsWelcome": [
+      {
+        "view": "devupServices",
+        "contents": "No devup daemon is running for this project.\n[Start daemon (devup up -d)](command:devup.daemon.start)\n\n[Open devup documentation](https://github.com/gachlab/devup#readme)",
+        "when": "!devup.daemonReachable"
+      }
+    ],
     "viewsContainers": {
       "activitybar": [
         {
@@ -82,7 +105,8 @@
       { "command": "devup.daemon.start",   "title": "devup: Start daemon (devup up -d)",   "icon": "$(play)" },
       { "command": "devup.daemon.stop",    "title": "devup: Stop daemon (devup down)",     "icon": "$(stop-circle)" },
       { "command": "devup.daemon.restart", "title": "devup: Restart daemon",                "icon": "$(debug-restart)" },
-      { "command": "devup.openServiceDetail", "title": "devup: Open service detail",        "icon": "$(preview)" }
+      { "command": "devup.openServiceDetail", "title": "devup: Open service detail",        "icon": "$(preview)" },
+      { "command": "devup.pickProfile",       "title": "devup: Select active profile",      "icon": "$(layers)" }
     ],
     "menus": {
       "view/title": [

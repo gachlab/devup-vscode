@@ -6,16 +6,22 @@ type Node =
   | { kind: 'service'; svc: ServiceSnapshot }
   | { kind: 'empty'; message: string };
 
-/** Tree-view provider for the `devup` view container. Two groups (APIs / Webs)
- *  with a per-service item underneath. Backed by the StatusStore so updates
- *  arrive live via `status.follow`, no polling. */
+/** Tree-view provider for the `devup` view container. Supports three grouping
+ *  modes (type / phase / none) and optional profile filtering. Backed by the
+ *  StatusStore so updates arrive live via `status.follow`, no polling. */
 export class ServicesTreeProvider implements vscode.TreeDataProvider<Node> {
   private readonly _onDidChangeTreeData = new vscode.EventEmitter<void>();
   readonly onDidChangeTreeData = this._onDidChangeTreeData.event;
   private readonly storeSub: vscode.Disposable;
+  private readonly configSub: vscode.Disposable;
 
   constructor(private readonly store: StatusStore) {
     this.storeSub = store.onDidChange(() => this._onDidChangeTreeData.fire());
+    this.configSub = vscode.workspace.onDidChangeConfiguration(e => {
+      if (e.affectsConfiguration('devup.treeView.groupBy') || e.affectsConfiguration('devup.profile')) {
+        this._onDidChangeTreeData.fire();
+      }
+    });
   }
 
   getTreeItem(node: Node): vscode.TreeItem {
@@ -29,7 +35,7 @@ export class ServicesTreeProvider implements vscode.TreeDataProvider<Node> {
         `${node.label} (${node.services.length})`,
         vscode.TreeItemCollapsibleState.Expanded,
       );
-      item.iconPath = new vscode.ThemeIcon(node.label === 'APIs' ? 'server' : 'browser');
+      item.iconPath = groupIcon(node.label);
       item.contextValue = 'group';
       return item;
     }
@@ -38,14 +44,27 @@ export class ServicesTreeProvider implements vscode.TreeDataProvider<Node> {
 
   getChildren(parent?: Node): Node[] {
     if (!parent) {
-      const state = this.store.getState();
-      if (state !== 'connected') {
-        return [{ kind: 'empty', message: state === 'connecting' ? 'Connecting to devup…' : 'devup is not running' }];
+      if (this.store.getState() !== 'connected') return [];
+      const cfg = vscode.workspace.getConfiguration('devup');
+      const groupBy = cfg.get<string>('treeView.groupBy', 'type');
+      const activeProfile = cfg.get<string>('profile', '').trim();
+
+      let services = this.store.getAll();
+      if (activeProfile) {
+        const profileServices = this.store.getInfo().profiles[activeProfile] ?? [];
+        services = services.filter(s => profileServices.includes(s.name));
       }
-      const all = this.store.getAll();
-      if (!all.length) return [{ kind: 'empty', message: 'No services registered' }];
-      const apis = all.filter(s => s.type === 'api').sort(byName);
-      const webs = all.filter(s => s.type === 'web').sort(byName);
+      if (!services.length) return [{ kind: 'empty', message: 'No services registered' }];
+
+      if (groupBy === 'none') {
+        return services.slice().sort(byName).map(svc => ({ kind: 'service', svc }));
+      }
+      if (groupBy === 'phase') {
+        return buildPhaseGroups(services);
+      }
+      // default: 'type'
+      const apis = services.filter(s => s.type === 'api').sort(byName);
+      const webs = services.filter(s => s.type === 'web').sort(byName);
       const groups: Node[] = [];
       if (apis.length) groups.push({ kind: 'group', label: 'APIs', services: apis });
       if (webs.length) groups.push({ kind: 'group', label: 'Webs', services: webs });
@@ -59,8 +78,29 @@ export class ServicesTreeProvider implements vscode.TreeDataProvider<Node> {
 
   dispose(): void {
     this.storeSub.dispose();
+    this.configSub.dispose();
     this._onDidChangeTreeData.dispose();
   }
+}
+
+function buildPhaseGroups(services: ServiceSnapshot[]): Node[] {
+  const byPhase = new Map<number, ServiceSnapshot[]>();
+  for (const svc of services) {
+    const ph = svc.phase ?? 0;
+    if (!byPhase.has(ph)) byPhase.set(ph, []);
+    byPhase.get(ph)!.push(svc);
+  }
+  return [...byPhase.keys()].sort((a, b) => a - b).map(ph => ({
+    kind: 'group' as const,
+    label: `phase ${ph}`,
+    services: byPhase.get(ph)!.sort(byName),
+  }));
+}
+
+function groupIcon(label: string): vscode.ThemeIcon {
+  if (label === 'APIs') return new vscode.ThemeIcon('server');
+  if (label === 'Webs') return new vscode.ThemeIcon('browser');
+  return new vscode.ThemeIcon('layers');
 }
 
 function byName(a: ServiceSnapshot, b: ServiceSnapshot): number {
