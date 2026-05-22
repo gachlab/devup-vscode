@@ -1,5 +1,8 @@
 # devup — VS Code extension
 
+[![VS Code Marketplace](https://img.shields.io/visual-studio-marketplace/v/gachlab.devup-vscode?label=marketplace&color=007ACC)](https://marketplace.visualstudio.com/items?itemName=gachlab.devup-vscode)
+[![Installs](https://img.shields.io/visual-studio-marketplace/i/gachlab.devup-vscode)](https://marketplace.visualstudio.com/items?itemName=gachlab.devup-vscode)
+
 Control your [@gachlab/devup](https://github.com/gachlab/devup) dev stack from inside VS Code: sidebar tree, status bar, live logs, service detail panels, daemon lifecycle commands, and profile filtering.
 
 Talks to a running devup daemon via its Unix-socket control plane — no separate process, no extra setup. If devup is running for your project, the extension picks it up automatically and reconnects whenever it comes back.
@@ -49,13 +52,19 @@ All data (service status, health, phase, profiles) comes exclusively from the da
 
 ## Install
 
-### From GitHub releases (recommended)
+### From the VS Code Marketplace (recommended)
 
-Each tagged [release](https://github.com/gachlab/devup-vscode/releases) ships with a `.vsix` attached. Download it, then in VS Code: `Cmd/Ctrl+Shift+P` → **Extensions: Install from VSIX…** → pick the file.
+Search **devup** in the Extensions panel, or install directly:
 
-### From the VS Code Marketplace
+```
+ext install gachlab.devup-vscode
+```
 
-Not yet published — coming once the publisher account is set up.
+Or open: [marketplace.visualstudio.com/items?itemName=gachlab.devup-vscode](https://marketplace.visualstudio.com/items?itemName=gachlab.devup-vscode)
+
+### From GitHub releases
+
+Each tagged [release](https://github.com/gachlab/devup-vscode/releases) also ships a `.vsix`. Download it, then: `Cmd/Ctrl+Shift+P` → **Extensions: Install from VSIX…** → pick the file.
 
 ### Build from source
 

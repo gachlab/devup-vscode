@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="128" height="128" viewBox="0 0 128 128">
+  <!-- Background -->
+  <rect width="128" height="128" rx="18" fill="#1E1E2E"/>
+
+  <!-- Service row 1 -->
+  <rect x="16" y="24" width="82" height="19" rx="6" fill="#313244"/>
+  <circle cx="28" cy="33.5" r="5.5" fill="#89DCEB"/>
+
+  <!-- Service row 2 -->
+  <rect x="16" y="51" width="82" height="19" rx="6" fill="#313244"/>
+  <circle cx="28" cy="60.5" r="5.5" fill="#A6E3A1"/>
+
+  <!-- Service row 3 -->
+  <rect x="16" y="78" width="82" height="19" rx="6" fill="#313244"/>
+  <circle cx="28" cy="87.5" r="5.5" fill="#A6E3A1"/>
+
+  <!-- Up arrow (right side) -->
+  <line x1="110" y1="100" x2="110" y2="50" stroke="#89B4FA" stroke-width="6" stroke-linecap="round"/>
+  <polyline points="100,62 110,50 120,62" stroke="#89B4FA" stroke-width="6" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+</svg>

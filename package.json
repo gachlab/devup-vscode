@@ -4,20 +4,29 @@
   "description": "Sidebar tree, status bar, and live logs for @gachlab/devup — control your dev stack without leaving the editor.",
   "version": "0.3.0",
   "publisher": "gachlab",
+  "icon": "media/icon.png",
+  "galleryBanner": {
+    "color": "#1E1E2E",
+    "theme": "dark"
+  },
   "license": "MIT",
   "engines": {
     "vscode": "^1.85.0",
     "node": ">=22"
   },
   "categories": [
-    "Other"
+    "Other",
+    "Visualization"
   ],
   "keywords": [
     "devup",
     "dev",
     "monorepo",
     "microservices",
-    "process-manager"
+    "process-manager",
+    "dev-stack",
+    "terminal",
+    "logs"
   ],
   "repository": {
     "type": "git",
