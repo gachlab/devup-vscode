@@ -5,6 +5,21 @@ All notable changes to the devup VS Code extension are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.5.0] — 2026-05-22
+
+UX improvements across tree view, detail panel, and notifications. Requires `@gachlab/devup` ≥ 0.11.1.
+
+### Added
+- **Crash reason in tree + detail panel** (#22) — last 5 crash log lines shown in service tooltip; collapsible "Last crash" section in the detail panel. Clears on successful restart.
+- **Service config in detail panel** (#24) — collapsible "Config" section shows `cmd`, `cwd`, `port`, `type`, `phase`.
+- **Open terminal in service cwd** (#21) — `devup: Open terminal in service cwd` command in tree context menu and detail panel. Opens an integrated terminal in the service's working directory.
+- **CPU/mem color coding** (#25) — service icon turns yellow when CPU > 80% or mem > 500 MB; red when CPU > 95% or mem > 1 GB. Thresholds configurable via settings.
+- **Hot reload notification** (#26) — notification when the daemon reloads config and services are added/removed. Suppressible via `devup.notifications.configReload`.
+- **Log filter in detail panel** — text input above the log viewport filters lines live; shows match count.
+
+### Requires
+- `@gachlab/devup` ≥ 0.11.1 (adds `cmd`, `cwd`, `crashLog` to status RPC snapshot).
+
 ## [0.4.1] — 2026-05-22
 
 ### Fixed

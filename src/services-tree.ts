@@ -102,11 +102,27 @@ function serviceItem(svc: ServiceSnapshot, store: StatusStore): vscode.TreeItem 
   const stats = store.getServiceStats(svc.name);
   const statsStr = stats ? `  · ${formatCpu(stats.cpu)} · ${formatMem(stats.memMB)}` : '';
   item.description = `:${svc.port}  ${svc.status}/${svc.health}${statsStr}`;
-  item.iconPath = healthIcon(svc);
+  item.iconPath = stats ? resourceIcon(svc, stats) : healthIcon(svc);
   item.contextValue = `service-${svc.type}`;
   item.command = { command: 'devup.tailLogs', title: 'Tail logs', arguments: [svc.name] };
   item.tooltip = buildTooltip(svc, stats);
   return item;
+}
+
+function resourceIcon(svc: ServiceSnapshot, stats: import('./status-store.js').ServiceStats): vscode.ThemeIcon {
+  const cfg = vscode.workspace.getConfiguration('devup.stats');
+  const cpuWarn = cfg.get<number>('cpuWarnThreshold', 80);
+  const memWarn = cfg.get<number>('memWarnThresholdMB', 500);
+  const cpuHigh = cfg.get<number>('cpuHighThreshold', 95);
+  const memHigh = cfg.get<number>('memHighThresholdMB', 1024);
+
+  if (stats.cpu >= cpuHigh || stats.memMB >= memHigh) {
+    return new vscode.ThemeIcon('warning', new vscode.ThemeColor('charts.red'));
+  }
+  if (stats.cpu >= cpuWarn || stats.memMB >= memWarn) {
+    return new vscode.ThemeIcon('warning', new vscode.ThemeColor('charts.yellow'));
+  }
+  return healthIcon(svc);
 }
 
 function healthIcon(svc: ServiceSnapshot): vscode.ThemeIcon {
@@ -127,5 +143,8 @@ function buildTooltip(svc: ServiceSnapshot, stats: import('./status-store.js').S
   if (svc.pid != null) md.appendMarkdown(`- pid: ${svc.pid}\n`);
   if (svc.errors)    md.appendMarkdown(`- errors: ${svc.errors}\n`);
   if (svc.restarts)  md.appendMarkdown(`- restarts: ${svc.restarts}\n`);
+  if (svc.crashLog?.length) {
+    md.appendMarkdown(`\n**Last crash:**\n\`\`\`\n${svc.crashLog.slice(-5).join('\n')}\n\`\`\``);
+  }
   return md;
 }
