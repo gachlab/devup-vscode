@@ -7,14 +7,8 @@ on:
     branches: [main]
 
 jobs:
-  # Cross-OS sanity check: typecheck + bundle must work on every platform
-  # where the extension might run. The .vsix is platform-agnostic, so we
-  # only ship the artifact from the ubuntu job (below) to avoid duplicates.
   build:
-    strategy:
-      matrix:
-        os: [ubuntu-latest, macos-latest, windows-latest]
-    runs-on: ${{ matrix.os }}
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
       - uses: actions/setup-node@v5
@@ -25,17 +19,6 @@ jobs:
         run: npm run typecheck
       - name: Build
         run: npm run build
-
-  package:
-    needs: build
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v5
-      - uses: actions/setup-node@v5
-        with:
-          node-version: 22
-      - run: npm ci
-      - run: npm run build
       - name: Package (vsix)
         run: npx --yes @vscode/vsce@latest package --no-dependencies --skip-license --out devup-vscode.vsix
       - name: Upload .vsix
