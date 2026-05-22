@@ -5,6 +5,17 @@ All notable changes to the devup VS Code extension are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.4.0] — 2026-05-22
+
+Stats integration and proxy-aware URLs. Requires `@gachlab/devup` ≥ 0.10.0.
+
+### Added
+- **Stats integration** (#8) — each service in the tree shows `· 2.3% · 184 MB` alongside its status. Status bar appends RAM usage to the aggregate line (e.g. `devup: 4/4 up · 45% · 6.2/16 GB`). Stats are polled every 3 s via the `stats` RPC. Degrades gracefully when the core is older than 0.10.0 (columns simply omitted).
+- **Proxy-aware URLs** (#9) — `devup: Open in browser` now honours the active reverse proxy configuration. Opens `https://<sub>.<domain>` when Traefik/Caddy/nginx is active and the service has a route; falls back to `http://localhost:<port>` otherwise. Both the tree-view context menu and the service detail panel use the same URL builder.
+
+### Requires
+- `@gachlab/devup` ≥ 0.10.0 (adds `stats` RPC and `proxy` field in `status` response).
+
 ## [0.3.0] — 2026-05-22
 
 Welcome view, configurable tree grouping, and profile filtering. Requires `@gachlab/devup` ≥ 0.10.1.

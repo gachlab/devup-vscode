@@ -1,6 +1,7 @@
 import * as vscode from 'vscode';
 import { sendRpc, RpcCallError } from './socket-client.js';
 import type { StatusStore, ServiceSnapshot } from './status-store.js';
+import { buildServiceUrl } from './url-builder.js';
 import type { LogChannels } from './log-channels.js';
 
 /** Resolve the service name from a command argument. The tree-view click
@@ -67,8 +68,8 @@ export function registerServiceCommands(
         void vscode.window.showWarningMessage(`devup: "${svc}" not found.`);
         return;
       }
-      // No proxy awareness in the extension yet; localhost-only for v1.
-      void vscode.env.openExternal(vscode.Uri.parse(`http://localhost:${info.port}`));
+      const url = buildServiceUrl(svc, info.port, store.getProxy());
+      void vscode.env.openExternal(vscode.Uri.parse(url));
     }),
 
     vscode.commands.registerCommand('devup.refresh', () => {
