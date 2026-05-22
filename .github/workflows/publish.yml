@@ -1,0 +1,51 @@
+name: Publish
+
+on:
+  release:
+    types: [published]
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: 'true'
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write  # required to attach the .vsix asset to the release
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ github.event.release.target_commitish }}
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm run build
+
+      - name: Package (.vsix)
+        run: npx --yes @vscode/vsce@latest package --no-dependencies --skip-license --out devup-vscode.vsix
+
+      - name: Attach .vsix to GitHub release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: devup-vscode.vsix
+          fail_on_unmatched_files: true
+
+      # Marketplace publishing is opt-in: set the VSCE_PAT secret in the repo
+      # (Settings → Secrets and variables → Actions) to a Personal Access Token
+      # from https://dev.azure.com that has Marketplace > Manage scope for the
+      # `gachlab` publisher. Without the secret this step prints a notice and
+      # exits cleanly.
+      - name: Publish to VS Code Marketplace (if VSCE_PAT is configured)
+        env:
+          VSCE_PAT: ${{ secrets.VSCE_PAT }}
+        run: |
+          if [ -z "$VSCE_PAT" ]; then
+            echo "::notice::VSCE_PAT secret not set — skipping marketplace publish."
+            echo "::notice::To enable, add a Personal Access Token at Settings → Secrets and variables → Actions → VSCE_PAT."
+            exit 0
+          fi
+          npx --yes @vscode/vsce@latest publish --no-dependencies --pat "$VSCE_PAT"
