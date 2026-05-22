@@ -39,6 +39,24 @@ If devup isn't running, the status bar shows `devup: not running`. Clicking it o
 - [@gachlab/devup](https://www.npmjs.com/package/@gachlab/devup) ≥ 0.8.0 running locally (the extension talks to its control plane).
 - Linux or macOS. Windows is not yet supported by the daemon, so the extension cannot connect there yet.
 
+## Install (pre-marketplace)
+
+Until the extension lands on the marketplace, the `.vsix` is built by CI on every push and attached to the workflow run as an artifact.
+
+1. Open the [latest CI run](https://github.com/gachlab/devup-vscode/actions/workflows/ci.yml).
+2. Scroll to **Artifacts** at the bottom of the page → download `devup-vscode-<sha>.zip`.
+3. Unzip → you get `devup-vscode.vsix`.
+4. In VS Code: `Cmd/Ctrl+Shift+P` → **Extensions: Install from VSIX…** → pick the file.
+
+Alternatively, build it yourself:
+
+```bash
+git clone git@github.com:gachlab/devup-vscode.git
+cd devup-vscode && npm install
+npx @vscode/vsce package --no-dependencies --skip-license
+# → produces devup-vscode-0.1.0.vsix
+```
+
 ## Development
 
 ```bash
