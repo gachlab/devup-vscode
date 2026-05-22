@@ -5,7 +5,23 @@ All notable changes to the devup VS Code extension are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.1.0] — Unreleased
+## [0.2.0] — 2026-05-22
+
+Visual depth + first-class daemon control. Three issues closed: #7, #10, #14.
+
+### Added
+- **Daemon management commands** (#14) — `devup: Start daemon` / `Stop daemon` / `Restart daemon` from the command palette. Tree-view title bar shows the right action based on whether the daemon is reachable: ▶ Start when down, ⟲ Restart + ⏹ Stop when up. All three shell out to the `devup` CLI in a reused integrated terminal (workspace cwd), so the behaviour is transparent and matches what you'd type by hand.
+- **Crash badge on the activity bar icon** (#7) — count of services with `status === 'crashed'` appears as a red numeric badge on the devup activity-bar icon. Clears automatically when everything recovers. Live-updated via the StatusStore.
+- **Service detail webview** (#10) — new `devup: Open service detail` command (inline `$(preview)` icon on each tree item, right-click menu, palette). Opens a webview panel beside the editor with status/health badges, port/pid/errors/restarts, action buttons (Restart, Stop, Tail logs, Open in browser), and a live recent-logs viewport (fed by `logs.follow`, 200-line tail then live, 500-line cap, auto-scroll). One panel per service; re-opening focuses the existing panel. Theme-aware via VS Code CSS variables.
+
+### Changed
+- Tree-item inline icons reordered: $(preview) detail, $(output) logs, $(refresh) restart.
+- New context key `devup.daemonReachable` powers the conditional title-bar menus.
+
+### Notes
+- Cross-repo work (stats integration, proxy-aware URLs) moved to milestone 0.4.0 — blocked on `@gachlab/devup` 0.10.0.
+
+## [0.1.0] — 2026-05-22
 
 First releasable MVP. Discovery + status bar + sidebar tree view + per-service log streaming + context-menu commands.
 
