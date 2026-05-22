@@ -1,67 +1,38 @@
 import * as vscode from 'vscode';
-import { sendRpc, RpcCallError } from './socket-client.js';
 import type { DiscoveryResult } from './discovery.js';
+import type { StatusStore } from './status-store.js';
 
-interface ServiceSnapshot {
-  name: string;
-  status: string;
-  health: string;
-}
-interface StatusResponse {
-  services: ServiceSnapshot[];
-}
-
-type Aggregate =
-  | { kind: 'unreachable'; reason: string }
-  | { kind: 'ok'; up: number; total: number; anyCrashed: boolean; anyStarting: boolean };
-
-/** Aggregate status into a single bar item. Polls every `pollIntervalMs` (config). */
+/** Aggregate status bar item — derives its content from the StatusStore.
+ *  No longer polls; updates live as `status.follow` frames flow in. */
 export class DevupStatusBar implements vscode.Disposable {
   private readonly item: vscode.StatusBarItem;
-  private timer: NodeJS.Timeout | null = null;
+  private readonly storeSub: vscode.Disposable;
 
-  constructor(private readonly discovery: DiscoveryResult) {
+  constructor(private readonly discovery: DiscoveryResult, private readonly store: StatusStore) {
     this.item = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 100);
     this.item.command = 'devup.tailLogs';
     this.item.text = 'devup: connecting…';
-    this.item.tooltip = `devup project: ${discovery.projectName} (${discovery.source})\n\nClick: tail logs for a service`;
+    this.item.tooltip = `devup project: ${discovery.projectName} (${discovery.source})\nClick: tail logs for a service`;
     this.item.show();
+
+    this.storeSub = store.onDidChange(() => this.render());
+    this.render();
   }
 
-  start(): void {
-    void this.refresh();
-    const intervalMs = vscode.workspace.getConfiguration('devup').get<number>('pollIntervalMs') ?? 3000;
-    this.timer = setInterval(() => void this.refresh(), Math.max(500, intervalMs));
-  }
-
-  async refresh(): Promise<Aggregate> {
-    const agg = await this.fetch();
-    this.render(agg);
-    return agg;
-  }
-
-  private async fetch(): Promise<Aggregate> {
-    try {
-      const result = (await sendRpc(this.discovery.socketPath, 'status', {}, { timeoutMs: 2000 })) as StatusResponse;
-      const services = result?.services ?? [];
-      const up = services.filter(s => s.health === 'up').length;
-      const anyCrashed = services.some(s => s.status === 'crashed');
-      const anyStarting = services.some(s => s.status === 'starting' || s.health === 'wait');
-      return { kind: 'ok', up, total: services.length, anyCrashed, anyStarting };
-    } catch (e) {
-      const reason = e instanceof RpcCallError ? e.message : String(e);
-      return { kind: 'unreachable', reason };
-    }
-  }
-
-  private render(agg: Aggregate): void {
-    if (agg.kind === 'unreachable') {
+  private render(): void {
+    const state = this.store.getState();
+    if (state !== 'connected') {
       this.item.text = '$(circle-slash) devup: not running';
-      this.item.tooltip = `devup project: ${this.discovery.projectName}\nSocket: ${this.discovery.socketPath}\n${agg.reason}\n\nStart it with: devup up -d`;
+      this.item.tooltip = `devup project: ${this.discovery.projectName}\nSocket: ${this.discovery.socketPath}\n${state === 'connecting' ? 'Connecting…' : 'Daemon is not reachable.'}\n\nStart it with: devup up -d`;
       this.item.backgroundColor = undefined;
       return;
     }
-    const { up, total, anyCrashed, anyStarting } = agg;
+    const services = this.store.getAll();
+    const total = services.length;
+    const up = services.filter(s => s.health === 'up').length;
+    const anyCrashed = services.some(s => s.status === 'crashed');
+    const anyStarting = services.some(s => s.status === 'starting' || s.health === 'wait');
+
     if (anyCrashed) {
       this.item.text = `$(error) devup: ${up}/${total} up`;
       this.item.backgroundColor = new vscode.ThemeColor('statusBarItem.errorBackground');
@@ -72,11 +43,11 @@ export class DevupStatusBar implements vscode.Disposable {
       this.item.text = `$(check) devup: ${up}/${total} up`;
       this.item.backgroundColor = undefined;
     }
-    this.item.tooltip = `devup project: ${this.discovery.projectName}\nSocket: ${this.discovery.socketPath}\n${up} of ${total} services healthy`;
+    this.item.tooltip = `devup project: ${this.discovery.projectName}\nSocket: ${this.discovery.socketPath}\n${up} of ${total} services healthy\n\nClick: tail logs for a service`;
   }
 
   dispose(): void {
-    if (this.timer) clearInterval(this.timer);
+    this.storeSub.dispose();
     this.item.dispose();
   }
 }
