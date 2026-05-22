@@ -22,9 +22,9 @@ export class DevupStatusBar implements vscode.Disposable {
 
   constructor(private readonly discovery: DiscoveryResult) {
     this.item = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 100);
-    this.item.command = 'devup.showStatus';
+    this.item.command = 'devup.tailLogs';
     this.item.text = 'devup: connecting…';
-    this.item.tooltip = `devup project: ${discovery.projectName} (${discovery.source})`;
+    this.item.tooltip = `devup project: ${discovery.projectName} (${discovery.source})\n\nClick: tail logs for a service`;
     this.item.show();
   }
 

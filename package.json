@@ -59,6 +59,10 @@
       {
         "command": "devup.showStatus",
         "title": "devup: Show status"
+      },
+      {
+        "command": "devup.tailLogs",
+        "title": "devup: Tail logs for a service…"
       }
     ]
   },
