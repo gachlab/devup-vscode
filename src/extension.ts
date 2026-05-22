@@ -6,11 +6,13 @@ import { StatusStore } from './status-store.js';
 import { ServicesTreeProvider } from './services-tree.js';
 import { registerServiceCommands } from './commands.js';
 import { registerDaemonCommands } from './daemon-commands.js';
+import { ServiceDetailPanels } from './service-detail.js';
 
 let statusBar: DevupStatusBar | null = null;
 let logChannels: LogChannels | null = null;
 let store: StatusStore | null = null;
 let tree: ServicesTreeProvider | null = null;
+let detailPanels: ServiceDetailPanels | null = null;
 
 export function activate(context: vscode.ExtensionContext): void {
   const folder = vscode.workspace.workspaceFolders?.[0];
@@ -58,6 +60,27 @@ export function activate(context: vscode.ExtensionContext): void {
   // Per-service commands (tailLogs / restart / stop / openInBrowser / refresh).
   registerServiceCommands(context, store, logChannels, discovery.socketPath);
 
+  // Service detail webview panels.
+  detailPanels = new ServiceDetailPanels(store, discovery.socketPath);
+  context.subscriptions.push(detailPanels);
+  context.subscriptions.push(
+    vscode.commands.registerCommand('devup.openServiceDetail', async (arg?: string | { svc?: string; name?: string }) => {
+      let svcName: string | undefined;
+      if (typeof arg === 'string') svcName = arg;
+      else if (arg && typeof arg === 'object') svcName = arg.svc ?? arg.name;
+      if (!svcName) {
+        const all = store!.getAll();
+        if (!all.length) { void vscode.window.showInformationMessage('devup: no services available.'); return; }
+        const picked = await vscode.window.showQuickPick(
+          all.map(s => ({ label: s.name, description: `:${s.port}  ${s.status}/${s.health}`, svc: s.name })),
+          { placeHolder: 'Open detail panel for which service?' },
+        );
+        svcName = picked?.svc;
+      }
+      if (svcName) detailPanels!.open(svcName);
+    }),
+  );
+
   // Daemon-level commands (start / stop / restart).
   registerDaemonCommands(context, folder.uri.fsPath);
 
@@ -93,4 +116,5 @@ export function deactivate(): void {
   logChannels = null;
   store = null;
   tree = null;
+  detailPanels = null;
 }
