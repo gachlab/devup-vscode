@@ -4,17 +4,28 @@ import type { StatusStore, ServiceSnapshot } from './status-store.js';
 import { buildServiceUrl } from './url-builder.js';
 import type { LogChannels } from './log-channels.js';
 
-/** Resolve the service name from a command argument. The tree-view click
- *  passes a plain string (the svc name), but external callers (command
- *  palette) hand us nothing — fall back to a quick-pick. */
-type ServiceArg = string | { svc?: string; name?: string } | undefined;
+type ServiceArg = string | Record<string, unknown> | undefined;
 
-async function resolveServiceName(arg: ServiceArg, store: StatusStore, prompt: string): Promise<string | null> {
+/** Extract the service name from any form a command argument can take:
+ *  - plain string (from item.command.arguments)
+ *  - tree Node { kind: 'service', svc: ServiceSnapshot } (from context menu)
+ *  - legacy { svc: string } or { name: string } shapes */
+function extractSvcName(arg: ServiceArg): string | null {
   if (typeof arg === 'string') return arg;
   if (arg && typeof arg === 'object') {
-    if (typeof arg.svc === 'string') return arg.svc;
-    if (typeof arg.name === 'string') return arg.name;
+    // Tree node: { kind: 'service', svc: ServiceSnapshot }
+    if (arg['kind'] === 'service' && arg['svc'] && typeof (arg['svc'] as Record<string, unknown>)['name'] === 'string') {
+      return (arg['svc'] as Record<string, unknown>)['name'] as string;
+    }
+    if (typeof arg['svc'] === 'string') return arg['svc'];
+    if (typeof arg['name'] === 'string') return arg['name'];
   }
+  return null;
+}
+
+async function resolveServiceName(arg: ServiceArg, store: StatusStore, prompt: string): Promise<string | null> {
+  const name = extractSvcName(arg);
+  if (name) return name;
   // Picker fallback.
   const all = store.getAll();
   if (!all.length) {
