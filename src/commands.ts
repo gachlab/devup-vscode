@@ -4,17 +4,14 @@ import type { StatusStore, ServiceSnapshot } from './status-store.js';
 import { buildServiceUrl } from './url-builder.js';
 import type { LogChannels } from './log-channels.js';
 
-/** Resolve the service name from a command argument. The tree-view click
- *  passes a plain string (the svc name), but external callers (command
- *  palette) hand us nothing — fall back to a quick-pick. */
-type ServiceArg = string | { svc?: string; name?: string } | undefined;
+import { extractSvcName } from './svc-name.js';
+export { extractSvcName };
+
+type ServiceArg = string | Record<string, unknown> | undefined;
 
 async function resolveServiceName(arg: ServiceArg, store: StatusStore, prompt: string): Promise<string | null> {
-  if (typeof arg === 'string') return arg;
-  if (arg && typeof arg === 'object') {
-    if (typeof arg.svc === 'string') return arg.svc;
-    if (typeof arg.name === 'string') return arg.name;
-  }
+  const name = extractSvcName(arg);
+  if (name) return name;
   // Picker fallback.
   const all = store.getAll();
   if (!all.length) {

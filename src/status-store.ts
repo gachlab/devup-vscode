@@ -1,43 +1,8 @@
 import * as vscode from 'vscode';
 import { openStream, sendRpc, type Subscription, type StreamFrame } from './socket-client.js';
 
-export interface ServiceSnapshot {
-  name: string;
-  status: string;
-  health: string;
-  port: number;
-  type: string;
-  phase: number;
-  pid: number | null;
-  errors: number;
-  restarts: number;
-}
-
-export interface ProjectInfo {
-  project: string;
-  profiles: Record<string, string[]>;
-}
-
-export interface ProxyInfo {
-  active: boolean;
-  provider: string;
-  domain: string;
-  tls: boolean;
-  routes: Record<string, string>;
-}
-
-export interface ServiceStats {
-  cpu: number;   // percent
-  memMB: number;
-}
-
-export interface SystemStats {
-  totalMemMB: number;
-  freeMemMB: number;
-  cpuCores: number;
-}
-
-export type ConnectionState = 'connecting' | 'connected' | 'unreachable';
+export type { ServiceSnapshot, ProjectInfo, ProxyInfo, ServiceStats, SystemStats, ConnectionState } from './types.js';
+import type { ServiceSnapshot, ProjectInfo, ProxyInfo, ServiceStats, SystemStats, ConnectionState } from './types.js';
 
 /** Single source of truth for service state. Consumes `status.follow` from the
  *  daemon (replacing the previous 3 s polling) and fans out change events to

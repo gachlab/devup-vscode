@@ -66,10 +66,20 @@ export function activate(context: vscode.ExtensionContext): void {
   detailPanels = new ServiceDetailPanels(store, discovery.socketPath);
   context.subscriptions.push(detailPanels);
   context.subscriptions.push(
-    vscode.commands.registerCommand('devup.openServiceDetail', async (arg?: string | { svc?: string; name?: string }) => {
+    vscode.commands.registerCommand('devup.openServiceDetail', async (arg?: string | Record<string, unknown>) => {
       let svcName: string | undefined;
-      if (typeof arg === 'string') svcName = arg;
-      else if (arg && typeof arg === 'object') svcName = arg.svc ?? arg.name;
+      if (typeof arg === 'string') {
+        svcName = arg;
+      } else if (arg && typeof arg === 'object') {
+        // Tree node: { kind: 'service', svc: ServiceSnapshot }
+        if (arg['kind'] === 'service' && arg['svc'] && typeof (arg['svc'] as Record<string, unknown>)['name'] === 'string') {
+          svcName = (arg['svc'] as Record<string, unknown>)['name'] as string;
+        } else if (typeof arg['svc'] === 'string') {
+          svcName = arg['svc'];
+        } else if (typeof arg['name'] === 'string') {
+          svcName = arg['name'];
+        }
+      }
       if (!svcName) {
         const all = store!.getAll();
         if (!all.length) { void vscode.window.showInformationMessage('devup: no services available.'); return; }
