@@ -46,6 +46,11 @@
           "type": "string",
           "default": "",
           "description": "Override the control-plane socket path entirely. When set, devup.projectName is ignored."
+        },
+        "devup.executablePath": {
+          "type": "string",
+          "default": "",
+          "description": "Path to devup executable. If empty, uses 'npx devup' which searches node_modules first, then global PATH."
         }
       }
     },
