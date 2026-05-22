@@ -2,7 +2,7 @@
   "name": "devup-vscode",
   "displayName": "devup",
   "description": "Sidebar tree, status bar, and live logs for @gachlab/devup — control your dev stack without leaving the editor.",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "publisher": "gachlab",
   "license": "MIT",
   "engines": {
