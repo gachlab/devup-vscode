@@ -5,11 +5,14 @@ import { LogChannels } from './log-channels.js';
 import { StatusStore } from './status-store.js';
 import { ServicesTreeProvider } from './services-tree.js';
 import { registerServiceCommands } from './commands.js';
+import { registerDaemonCommands } from './daemon-commands.js';
+import { ServiceDetailPanels } from './service-detail.js';
 
 let statusBar: DevupStatusBar | null = null;
 let logChannels: LogChannels | null = null;
 let store: StatusStore | null = null;
 let tree: ServicesTreeProvider | null = null;
+let detailPanels: ServiceDetailPanels | null = null;
 
 export function activate(context: vscode.ExtensionContext): void {
   const folder = vscode.workspace.workspaceFolders?.[0];
@@ -32,12 +35,54 @@ export function activate(context: vscode.ExtensionContext): void {
 
   // Sidebar tree view — also derives from the store.
   tree = new ServicesTreeProvider(store);
+  const treeView = vscode.window.createTreeView('devupServices', { treeDataProvider: tree });
+  context.subscriptions.push(treeView);
+
+  // Crash badge on the activity bar icon — count of crashed services.
+  // Cleared automatically when none are crashed.
+  const updateBadge = () => {
+    const crashed = store!.getAll().filter(s => s.status === 'crashed');
+    treeView.badge = crashed.length
+      ? { value: crashed.length, tooltip: `${crashed.length} service${crashed.length === 1 ? '' : 's'} crashed` }
+      : undefined;
+  };
+  context.subscriptions.push(store.onDidChange(updateBadge));
+  updateBadge();
+
+  // Maintain a context key that menu `when` clauses can branch on.
+  // Updated whenever the store's connection state changes.
+  const updateContext = () => {
+    void vscode.commands.executeCommand('setContext', 'devup.daemonReachable', store!.getState() === 'connected');
+  };
+  context.subscriptions.push(store.onDidChange(updateContext));
+  updateContext();
+
+  // Per-service commands (tailLogs / restart / stop / openInBrowser / refresh).
+  registerServiceCommands(context, store, logChannels, discovery.socketPath);
+
+  // Service detail webview panels.
+  detailPanels = new ServiceDetailPanels(store, discovery.socketPath);
+  context.subscriptions.push(detailPanels);
   context.subscriptions.push(
-    vscode.window.registerTreeDataProvider('devupServices', tree),
+    vscode.commands.registerCommand('devup.openServiceDetail', async (arg?: string | { svc?: string; name?: string }) => {
+      let svcName: string | undefined;
+      if (typeof arg === 'string') svcName = arg;
+      else if (arg && typeof arg === 'object') svcName = arg.svc ?? arg.name;
+      if (!svcName) {
+        const all = store!.getAll();
+        if (!all.length) { void vscode.window.showInformationMessage('devup: no services available.'); return; }
+        const picked = await vscode.window.showQuickPick(
+          all.map(s => ({ label: s.name, description: `:${s.port}  ${s.status}/${s.health}`, svc: s.name })),
+          { placeHolder: 'Open detail panel for which service?' },
+        );
+        svcName = picked?.svc;
+      }
+      if (svcName) detailPanels!.open(svcName);
+    }),
   );
 
-  // Commands (tailLogs / restart / stop / openInBrowser / refresh).
-  registerServiceCommands(context, store, logChannels, discovery.socketPath);
+  // Daemon-level commands (start / stop / restart).
+  registerDaemonCommands(context, folder.uri.fsPath);
 
   // Show-status notification command (legacy entry point).
   context.subscriptions.push(
@@ -71,4 +116,5 @@ export function deactivate(): void {
   logChannels = null;
   store = null;
   tree = null;
+  detailPanels = null;
 }
