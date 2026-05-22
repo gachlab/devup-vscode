@@ -6,15 +6,16 @@ Talks to a running devup process via its Unix-socket control plane — no separa
 
 ## Status
 
-**0.1.0 — early scaffold.** Only the status bar item is wired up. Tree view, output channels, and commands are coming next. Not yet on the marketplace.
+**0.1.0 — MVP.** Not yet on the marketplace; download the `.vsix` from CI artifacts (see Install below).
 
 | Feature | Status |
 |---|---|
 | Status bar (aggregate `N/M up`) | ✅ |
-| Services tree view in sidebar | 🔲 |
-| Per-service output channels (live logs) | 🔲 |
-| Restart / Stop / Open-in-browser commands | 🔲 |
-| Start devup from VS Code when not running | ⏳ (button in "not running" prompt) |
+| Services tree view in sidebar | ✅ |
+| Per-service output channels (live logs) | ✅ |
+| Restart / Stop / Open-in-browser commands | ✅ |
+| Live updates via `status.follow` (no polling) | ✅ |
+| Start devup from VS Code when not running | ✅ |
 
 ## How it works
 
@@ -31,7 +32,6 @@ If devup isn't running, the status bar shows `devup: not running`. Clicking it o
 |---|---|---|
 | `devup.projectName` | `""` | Override the project name. Use when the auto-detect picks the wrong thing. |
 | `devup.socketPath` | `""` | Full override of the socket path. When set, `projectName` is ignored. |
-| `devup.pollIntervalMs` | `3000` | Status bar poll interval, milliseconds. |
 
 ## Requirements
 
