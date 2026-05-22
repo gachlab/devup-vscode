@@ -51,6 +51,7 @@ export class ServiceDetailPanels implements vscode.Disposable {
         case 'stop':          void vscode.commands.executeCommand('devup.stop', svcName); break;
         case 'tailLogs':      void vscode.commands.executeCommand('devup.tailLogs', svcName); break;
         case 'openInBrowser': void vscode.commands.executeCommand('devup.openInBrowser', svcName); break;
+        case 'openTerminal':  void vscode.commands.executeCommand('devup.openTerminal', svcName); break;
       }
     });
 
@@ -139,11 +140,34 @@ function renderHtml(svc: ServiceSnapshot): string {
     <button id="btn-restart">Restart</button>
     <button id="btn-stop" class="secondary">Stop</button>
     <button id="btn-tail" class="secondary">Tail logs</button>
+    <button id="btn-terminal" class="secondary">Open terminal</button>
     ${svc.type === 'web' ? '<button id="btn-open" class="secondary">Open in browser</button>' : ''}
   </div>
 
+  ${svc.crashLog?.length ? `<hr>
+  <details id="crash-section">
+    <summary style="cursor:pointer;color:var(--vscode-errorForeground);font-weight:600">⚠ Last crash log</summary>
+    <pre id="crash-log" style="font-family:var(--vscode-editor-font-family);font-size:0.85em;overflow-x:auto;background:var(--vscode-textCodeBlock-background);padding:8px;border-radius:3px;margin-top:8px">${escapeHtml(svc.crashLog.join('\n'))}</pre>
+  </details>` : '<div id="crash-section" style="display:none"></div>'}
+
+  <hr>
+  <details id="config-section">
+    <summary style="cursor:pointer;color:var(--vscode-descriptionForeground);font-weight:600">Config</summary>
+    <dl class="grid" style="margin-top:8px">
+      ${svc.cmd ? `<dt>cmd</dt><dd id="cfg-cmd" style="font-family:var(--vscode-editor-font-family)">${escapeHtml(svc.cmd)}</dd>` : ''}
+      ${svc.cwd ? `<dt>cwd</dt><dd id="cfg-cwd" style="font-family:var(--vscode-editor-font-family)">${escapeHtml(svc.cwd)}</dd>` : ''}
+      <dt>port</dt><dd>${svc.port}</dd>
+      <dt>type</dt><dd>${escapeHtml(svc.type)}</dd>
+      <dt>phase</dt><dd>${svc.phase}</dd>
+    </dl>
+  </details>
+
   <hr>
   <h2>Recent logs</h2>
+  <div id="filter-row" style="margin-bottom:6px;display:flex;gap:6px;align-items:center">
+    <input id="log-filter" type="text" placeholder="Filter logs…" style="flex:1;background:var(--vscode-input-background);color:var(--vscode-input-foreground);border:1px solid var(--vscode-input-border);border-radius:2px;padding:3px 6px;font-size:0.85em">
+    <span id="filter-count" style="font-size:0.8em;color:var(--vscode-descriptionForeground)"></span>
+  </div>
   <div id="logs"></div>
 
   <script nonce="${nonce}">
@@ -151,12 +175,27 @@ function renderHtml(svc: ServiceSnapshot): string {
     document.getElementById('btn-restart').addEventListener('click', () => vscode.postMessage({ type: 'restart' }));
     document.getElementById('btn-stop').addEventListener('click',    () => vscode.postMessage({ type: 'stop' }));
     document.getElementById('btn-tail').addEventListener('click',    () => vscode.postMessage({ type: 'tailLogs' }));
+    document.getElementById('btn-terminal').addEventListener('click',() => vscode.postMessage({ type: 'openTerminal' }));
     const openBtn = document.getElementById('btn-open');
     if (openBtn) openBtn.addEventListener('click', () => vscode.postMessage({ type: 'openInBrowser' }));
 
     const logsEl = document.getElementById('logs');
     const statusBadge = document.getElementById('status-badge');
     const healthBadge = document.getElementById('health-badge');
+    const filterInput = document.getElementById('log-filter');
+    const filterCount = document.getElementById('filter-count');
+    let filterText = '';
+
+    filterInput.addEventListener('input', () => {
+      filterText = filterInput.value.toLowerCase();
+      let matches = 0;
+      for (const child of logsEl.children) {
+        const visible = !filterText || child.textContent.toLowerCase().includes(filterText);
+        child.style.display = visible ? '' : 'none';
+        if (visible) matches++;
+      }
+      filterCount.textContent = filterText ? matches + ' matches' : '';
+    });
 
     function setBadgeClass(el, value) {
       el.classList.remove('up', 'down', 'wait', 'idle', 'crashed');
@@ -164,16 +203,20 @@ function renderHtml(svc: ServiceSnapshot): string {
       el.textContent = value;
     }
 
+    function appendLog(line) {
+      const wasAtBottom = logsEl.scrollTop + logsEl.clientHeight >= logsEl.scrollHeight - 4;
+      const div = document.createElement('div');
+      div.textContent = line;
+      if (filterText && !line.toLowerCase().includes(filterText)) div.style.display = 'none';
+      logsEl.appendChild(div);
+      while (logsEl.childElementCount > 500) logsEl.removeChild(logsEl.firstChild);
+      if (wasAtBottom && !filterText) logsEl.scrollTop = logsEl.scrollHeight;
+    }
+
     window.addEventListener('message', e => {
       const m = e.data;
       if (m.type === 'log') {
-        const wasAtBottom = logsEl.scrollTop + logsEl.clientHeight >= logsEl.scrollHeight - 4;
-        const line = document.createElement('div');
-        line.textContent = m.line;
-        logsEl.appendChild(line);
-        // Cap at 500 lines so the panel stays snappy.
-        while (logsEl.childElementCount > 500) logsEl.removeChild(logsEl.firstChild);
-        if (wasAtBottom) logsEl.scrollTop = logsEl.scrollHeight;
+        appendLog(m.line);
       } else if (m.type === 'svc') {
         const s = m.svc;
         setBadgeClass(statusBadge, s.status);
@@ -181,6 +224,15 @@ function renderHtml(svc: ServiceSnapshot): string {
         document.getElementById('pid').textContent      = s.pid ?? '—';
         document.getElementById('errors').textContent   = s.errors;
         document.getElementById('restarts').textContent = s.restarts;
+        // Update crash log section
+        const crashSection = document.getElementById('crash-section');
+        if (s.crashLog && s.crashLog.length) {
+          crashSection.style.display = '';
+          const pre = crashSection.querySelector('#crash-log');
+          if (pre) pre.textContent = s.crashLog.join('\\n');
+        } else {
+          crashSection.style.display = 'none';
+        }
       }
     });
   </script>

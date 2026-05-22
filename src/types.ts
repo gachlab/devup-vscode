@@ -7,9 +7,12 @@ export interface ServiceSnapshot {
   port: number;
   type: string;
   phase: number;
+  cmd?: string;
+  cwd?: string;
   pid: number | null;
   errors: number;
   restarts: number;
+  crashLog?: string[] | null;
 }
 
 export interface ProjectInfo {

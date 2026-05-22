@@ -2,7 +2,7 @@
   "name": "devup-vscode",
   "displayName": "devup",
   "description": "Sidebar tree, status bar, and live logs for @gachlab/devup — control your dev stack without leaving the editor.",
-  "version": "0.4.1",
+  "version": "0.5.0",
   "publisher": "gachlab",
   "icon": "media/icon.png",
   "galleryBanner": {
@@ -80,6 +80,31 @@
           "type": "string",
           "default": "",
           "description": "Active profile filter. When set, only services belonging to this profile are shown. Leave empty to show all services."
+        },
+        "devup.stats.cpuWarnThreshold": {
+          "type": "number",
+          "default": 80,
+          "description": "CPU% threshold for warning icon on service tree items."
+        },
+        "devup.stats.memWarnThresholdMB": {
+          "type": "number",
+          "default": 500,
+          "description": "Memory (MB) threshold for warning icon on service tree items."
+        },
+        "devup.stats.cpuHighThreshold": {
+          "type": "number",
+          "default": 95,
+          "description": "CPU% threshold for red (critical) icon on service tree items."
+        },
+        "devup.stats.memHighThresholdMB": {
+          "type": "number",
+          "default": 1024,
+          "description": "Memory (MB) threshold for red (critical) icon on service tree items."
+        },
+        "devup.notifications.configReload": {
+          "type": "boolean",
+          "default": true,
+          "description": "Show a notification when the daemon hot-reloads the config and services are added or removed."
         }
       }
     },
@@ -162,6 +187,11 @@
         "command": "devup.pickProfile",
         "title": "devup: Select active profile",
         "icon": "$(layers)"
+      },
+      {
+        "command": "devup.openTerminal",
+        "title": "devup: Open terminal in service cwd",
+        "icon": "$(terminal)"
       }
     ],
     "menus": {
@@ -222,6 +252,11 @@
           "command": "devup.stop",
           "when": "view == devupServices && viewItem =~ /service-/",
           "group": "1_actions@5"
+        },
+        {
+          "command": "devup.openTerminal",
+          "when": "view == devupServices && viewItem =~ /service-/",
+          "group": "1_actions@6"
         }
       ]
     }

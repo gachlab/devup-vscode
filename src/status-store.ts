@@ -66,9 +66,11 @@ export class StatusStore implements vscode.Disposable {
       this.socketPath, 'status.follow', {},
       (frame: StreamFrame) => {
         if (frame.event !== 'status' || !Array.isArray(frame.data)) return;
+        const prevNames = new Set(this.services.keys());
         for (const s of frame.data as ServiceSnapshot[]) {
           this.services.set(s.name, s);
         }
+        this.detectReloadChanges(prevNames);
         this.emitter.fire();
       },
       () => this.onConnectionLost(),
@@ -101,6 +103,18 @@ export class StatusStore implements vscode.Disposable {
     if (this.statsTimer) { clearInterval(this.statsTimer); this.statsTimer = null; }
     this.serviceStats.clear();
     this.systemStats = null;
+  }
+
+  private detectReloadChanges(prevNames: Set<string>): void {
+    if (!vscode.workspace.getConfiguration('devup.notifications').get<boolean>('configReload', true)) return;
+    const currentNames = new Set(this.services.keys());
+    const added = [...currentNames].filter(n => !prevNames.has(n));
+    const removed = [...prevNames].filter(n => !currentNames.has(n));
+    if (!added.length && !removed.length) return;
+    const parts: string[] = [];
+    if (added.length) parts.push(`added: ${added.join(', ')}`);
+    if (removed.length) parts.push(`removed: ${removed.join(', ')}`);
+    void vscode.window.showInformationMessage(`devup: config reloaded — ${parts.join('; ')}`);
   }
 
   private onConnectionLost(): void {

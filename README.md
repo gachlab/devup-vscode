@@ -23,6 +23,12 @@ Talks to a running devup daemon via its Unix-socket control plane — no separat
 | Group services by boot phase (`devup.treeView.groupBy`) | 0.3.0 |
 | Flat list mode (no grouping) | 0.3.0 |
 | Profile picker — filter tree to a config profile | 0.3.0 |
+| Crash reason in tree tooltip + detail panel "Last crash" section | 0.5.0 |
+| Service config (cmd, cwd, port) in detail panel | 0.5.0 |
+| Open terminal in service cwd — tree context menu + detail panel button | 0.5.0 |
+| CPU/mem color coding — yellow/red icons at configurable thresholds | 0.5.0 |
+| Hot reload notification when services are added/removed | 0.5.0 |
+| Log filter in detail panel — live search with match count | 0.5.0 |
 | Stats per service (CPU% · mem) in tree + system totals in status bar | 0.4.0 |
 | Proxy-aware URLs in "Open in browser" (Traefik / Caddy / nginx) | 0.4.0 |
 | Resolves local `node_modules` devup before global install | 0.2.1 |

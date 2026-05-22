@@ -69,6 +69,26 @@ export function registerServiceCommands(
       void vscode.env.openExternal(vscode.Uri.parse(url));
     }),
 
+    vscode.commands.registerCommand('devup.openTerminal', async (arg?: ServiceArg) => {
+      const name = extractSvcName(arg);
+      const svcName = name ?? await (async () => {
+        const all = store.getAll();
+        if (!all.length) return null;
+        const picked = await vscode.window.showQuickPick(
+          all.map(s => ({ label: s.name, description: s.cwd ?? s.type })),
+          { placeHolder: 'Open terminal for which service?' },
+        );
+        return picked?.label ?? null;
+      })();
+      if (!svcName) return;
+      const svc = store.getAll().find(s => s.name === svcName);
+      if (!svc?.cwd) { void vscode.window.showWarningMessage(`devup: cwd not available for "${svcName}"`); return; }
+      const workspaceRoot = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath ?? '';
+      const fullCwd = svc.cwd.startsWith('/') ? svc.cwd : `${workspaceRoot}/${svc.cwd}`;
+      const term = vscode.window.createTerminal({ name: `devup: ${svcName}`, cwd: fullCwd });
+      term.show();
+    }),
+
     vscode.commands.registerCommand('devup.refresh', () => {
       // Tree-view refresh button. Store updates flow through onDidChange already;
       // this is a no-op trigger for users to force-feel a refresh after the daemon
