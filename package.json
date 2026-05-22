@@ -73,14 +73,27 @@
       { "command": "devup.restart",        "title": "devup: Restart service",          "icon": "$(refresh)" },
       { "command": "devup.stop",           "title": "devup: Stop service",             "icon": "$(stop)" },
       { "command": "devup.openInBrowser",  "title": "devup: Open in browser",          "icon": "$(globe)" },
-      { "command": "devup.refresh",        "title": "devup: Refresh services",         "icon": "$(refresh)" }
+      { "command": "devup.refresh",        "title": "devup: Refresh services",         "icon": "$(refresh)" },
+      { "command": "devup.daemon.start",   "title": "devup: Start daemon (devup up -d)",   "icon": "$(play)" },
+      { "command": "devup.daemon.stop",    "title": "devup: Stop daemon (devup down)",     "icon": "$(stop-circle)" },
+      { "command": "devup.daemon.restart", "title": "devup: Restart daemon",                "icon": "$(debug-restart)" }
     ],
     "menus": {
       "view/title": [
         {
-          "command": "devup.refresh",
-          "when": "view == devupServices",
-          "group": "navigation"
+          "command": "devup.daemon.start",
+          "when": "view == devupServices && !devup.daemonReachable",
+          "group": "navigation@1"
+        },
+        {
+          "command": "devup.daemon.restart",
+          "when": "view == devupServices && devup.daemonReachable",
+          "group": "navigation@1"
+        },
+        {
+          "command": "devup.daemon.stop",
+          "when": "view == devupServices && devup.daemonReachable",
+          "group": "navigation@2"
         }
       ],
       "view/item/context": [

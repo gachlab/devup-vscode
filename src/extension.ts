@@ -5,6 +5,7 @@ import { LogChannels } from './log-channels.js';
 import { StatusStore } from './status-store.js';
 import { ServicesTreeProvider } from './services-tree.js';
 import { registerServiceCommands } from './commands.js';
+import { registerDaemonCommands } from './daemon-commands.js';
 
 let statusBar: DevupStatusBar | null = null;
 let logChannels: LogChannels | null = null;
@@ -36,8 +37,19 @@ export function activate(context: vscode.ExtensionContext): void {
     vscode.window.registerTreeDataProvider('devupServices', tree),
   );
 
-  // Commands (tailLogs / restart / stop / openInBrowser / refresh).
+  // Maintain a context key that menu `when` clauses can branch on.
+  // Updated whenever the store's connection state changes.
+  const updateContext = () => {
+    void vscode.commands.executeCommand('setContext', 'devup.daemonReachable', store!.getState() === 'connected');
+  };
+  context.subscriptions.push(store.onDidChange(updateContext));
+  updateContext();
+
+  // Per-service commands (tailLogs / restart / stop / openInBrowser / refresh).
   registerServiceCommands(context, store, logChannels, discovery.socketPath);
+
+  // Daemon-level commands (start / stop / restart).
+  registerDaemonCommands(context, folder.uri.fsPath);
 
   // Show-status notification command (legacy entry point).
   context.subscriptions.push(
