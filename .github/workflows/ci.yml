@@ -6,6 +6,12 @@ on:
   pull_request:
     branches: [main]
 
+env:
+  # Opt into Node 24 for actions/upload-artifact (silences the Node 20
+  # deprecation notice that lands across all v4 actions until upstream
+  # cuts a Node-24-native release).
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: 'true'
+
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -21,10 +27,12 @@ jobs:
         run: npm run build
       - name: Package (vsix)
         run: npx --yes @vscode/vsce@latest package --no-dependencies --skip-license --out devup-vscode.vsix
+      # retention-days omitted on purpose: the gachlab org caps artifact retention
+      # at 1 day, so any explicit value emits a warning. Bump it via
+      # Settings → Actions → General → Artifact and log retention if you want longer.
       - name: Upload .vsix
         uses: actions/upload-artifact@v4
         with:
           name: devup-vscode-${{ github.sha }}
           path: devup-vscode.vsix
-          retention-days: 30
           if-no-files-found: error
