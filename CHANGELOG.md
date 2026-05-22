@@ -5,6 +5,16 @@ All notable changes to the devup VS Code extension are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.4.1] — 2026-05-22
+
+### Fixed
+- **Tree context menu commands broken** (#27) — all commands triggered from the tree view (Open detail, Restart, Stop, Open in browser) were receiving the full tree Node object as argument instead of a service name string, resulting in `[object Object]`. Added `extractSvcName()` helper that handles all argument shapes.
+
+### Internal
+- Extracted pure logic to vscode-free modules: `src/types.ts`, `src/svc-name.ts`, `src/tree-logic.ts`
+- Added 27 unit tests covering `extractSvcName`, `buildPhaseGroups`, `buildServiceUrl`, `formatCpu`, `formatMem`
+- CI and publish pipelines now run unit tests before build
+
 ## [0.4.0] — 2026-05-22
 
 Stats integration and proxy-aware URLs. Requires `@gachlab/devup` ≥ 0.10.0.
