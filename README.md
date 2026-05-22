@@ -1,79 +1,90 @@
 # devup — VS Code extension
 
-Control your [@gachlab/devup](https://github.com/gachlab/devup) dev stack from inside VS Code: status bar, services tree view (soon), restart/stop/logs (soon), live log streaming (soon).
+[![VS Code Marketplace](https://img.shields.io/visual-studio-marketplace/v/gachlab.devup-vscode?label=marketplace&color=007ACC)](https://marketplace.visualstudio.com/items?itemName=gachlab.devup-vscode)
+[![Installs](https://img.shields.io/visual-studio-marketplace/i/gachlab.devup-vscode)](https://marketplace.visualstudio.com/items?itemName=gachlab.devup-vscode)
 
-Talks to a running devup process via its Unix-socket control plane — no separate daemon, no extra setup. If devup is running for your project, the extension picks it up automatically.
+Control your [@gachlab/devup](https://github.com/gachlab/devup) dev stack from inside VS Code: sidebar tree, status bar, live logs, service detail panels, daemon lifecycle commands, and profile filtering.
 
-## Status
+Talks to a running devup daemon via its Unix-socket control plane — no separate process, no extra setup. If devup is running for your project, the extension picks it up automatically and reconnects whenever it comes back.
 
-**0.1.0 — MVP.** Not yet on the marketplace; download the `.vsix` from CI artifacts (see Install below).
+## Features
 
-| Feature | Status |
+| Feature | Since |
 |---|---|
-| Status bar (aggregate `N/M up`) | ✅ |
-| Services tree view in sidebar | ✅ |
-| Per-service output channels (live logs) | ✅ |
-| Restart / Stop / Open-in-browser commands | ✅ |
-| Live updates via `status.follow` (no polling) | ✅ |
-| Start devup from VS Code when not running | ✅ |
+| Status bar — aggregate `N/M up` with health colour | 0.1.0 |
+| Services tree view — grouped by type (APIs / Webs) | 0.1.0 |
+| Per-service output channels with live log streaming | 0.1.0 |
+| Restart / Stop / Open-in-browser per service | 0.1.0 |
+| Live updates via `status.follow` — no polling | 0.1.0 |
+| Crash badge on the activity-bar icon | 0.2.0 |
+| Service detail webview — live logs, status/health badges, action buttons | 0.2.0 |
+| Daemon lifecycle commands from the sidebar (start / stop / restart) | 0.2.0 |
+| Welcome view with Start button when daemon is not running | 0.3.0 |
+| Group services by boot phase (`devup.treeView.groupBy`) | 0.3.0 |
+| Flat list mode (no grouping) | 0.3.0 |
+| Profile picker — filter tree to a config profile | 0.3.0 |
+| Resolves local `node_modules` devup before global install | 0.2.1 |
 
 ## How it works
 
 1. The extension activates when your workspace contains `devup.config.{ts,js,json}`.
-2. It reads the project `name` from that file (JSON parse for `.json`, regex for `.ts`/`.js`).
-3. It connects to `~/.devup/sock-<name>.sock` — the same socket that `devup` itself binds when running.
-4. The status bar polls `status` every 3 s (configurable).
+2. It resolves the project `name` from that file and connects to `~/.devup/sock-<name>.sock`.
+3. It opens a persistent `status.follow` stream — service state updates arrive in real time with no polling.
+4. When the daemon goes down, the extension shows a welcome view and automatically reconnects every 3 s.
 
-If devup isn't running, the status bar shows `devup: not running`. Clicking it offers to launch `devup up -d` in the integrated terminal.
+All data (service status, health, phase, profiles) comes exclusively from the daemon's control-plane RPC — the extension never reads your config file directly.
 
 ## Configuration
 
 | Setting | Default | Description |
 |---|---|---|
-| `devup.projectName` | `""` | Override the project name. Use when the auto-detect picks the wrong thing. |
+| `devup.projectName` | `""` | Override the project name used to locate the socket. |
 | `devup.socketPath` | `""` | Full override of the socket path. When set, `projectName` is ignored. |
+| `devup.executablePath` | `""` | Path to the `devup` binary. Empty = use `npx devup` (local `node_modules` first, then global). |
+| `devup.treeView.groupBy` | `"type"` | How to group services: `"type"` (APIs / Webs), `"phase"` (phase 0, phase 1, …), or `"none"` (flat list). |
+| `devup.profile` | `""` | Active profile filter. When set, only services in that profile are shown. Empty = all services. |
 
 ## Requirements
 
 - VS Code ≥ 1.85
-- [@gachlab/devup](https://www.npmjs.com/package/@gachlab/devup) ≥ 0.8.0 running locally (the extension talks to its control plane).
-- Linux or macOS. Windows is not yet supported by the daemon, so the extension cannot connect there yet.
+- [@gachlab/devup](https://www.npmjs.com/package/@gachlab/devup) **≥ 0.10.1** running locally (the extension uses the `info` and `stats` RPC methods added in that release).
+- Linux or macOS. Windows is not yet supported by the devup daemon.
 
 ## Install
 
-### From GitHub releases (recommended)
+### From the VS Code Marketplace (recommended)
 
-Each tagged [release](https://github.com/gachlab/devup-vscode/releases) ships with a `.vsix` attached. Download it, then in VS Code: `Cmd/Ctrl+Shift+P` → **Extensions: Install from VSIX…** → pick the file.
+Search **devup** in the Extensions panel, or install directly:
 
-### From the latest CI build
+```
+ext install gachlab.devup-vscode
+```
 
-For the bleeding edge, every push to `main` produces a `.vsix` as a CI artifact:
+Or open: [marketplace.visualstudio.com/items?itemName=gachlab.devup-vscode](https://marketplace.visualstudio.com/items?itemName=gachlab.devup-vscode)
 
-1. Open the [latest CI run](https://github.com/gachlab/devup-vscode/actions/workflows/ci.yml).
-2. Scroll to **Artifacts** → download `devup-vscode-<sha>.zip`, unzip.
-3. Install the `.vsix` as above.
+### From GitHub releases
 
-### From the VS Code Marketplace
+Each tagged [release](https://github.com/gachlab/devup-vscode/releases) also ships a `.vsix`. Download it, then: `Cmd/Ctrl+Shift+P` → **Extensions: Install from VSIX…** → pick the file.
 
-Not yet — coming once the publisher account is set up. The release workflow will auto-publish once the `VSCE_PAT` secret is configured.
-
-Alternatively, build it yourself:
+### Build from source
 
 ```bash
 git clone git@github.com:gachlab/devup-vscode.git
 cd devup-vscode && npm install
 npx @vscode/vsce package --no-dependencies --skip-license
-# → produces devup-vscode-0.1.0.vsix
+# → produces devup-vscode-0.3.0.vsix
 ```
 
 ## Development
 
 ```bash
 npm install
-npm run build
+npm run build      # one-off build
+npm run watch      # rebuild on save
+npm run typecheck  # type-check without emitting
 ```
 
-Open this repo in VS Code and press F5 to launch a new Extension Development Host window for live testing.
+Open this repo in VS Code and press **F5** to launch an Extension Development Host window.
 
 ## License
 

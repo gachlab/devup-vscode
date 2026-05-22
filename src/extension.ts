@@ -7,12 +7,14 @@ import { ServicesTreeProvider } from './services-tree.js';
 import { registerServiceCommands } from './commands.js';
 import { registerDaemonCommands } from './daemon-commands.js';
 import { ServiceDetailPanels } from './service-detail.js';
+import { ProfilePicker } from './profile-picker.js';
 
 let statusBar: DevupStatusBar | null = null;
 let logChannels: LogChannels | null = null;
 let store: StatusStore | null = null;
 let tree: ServicesTreeProvider | null = null;
 let detailPanels: ServiceDetailPanels | null = null;
+let profilePicker: ProfilePicker | null = null;
 
 export function activate(context: vscode.ExtensionContext): void {
   const folder = vscode.workspace.workspaceFolders?.[0];
@@ -81,6 +83,10 @@ export function activate(context: vscode.ExtensionContext): void {
     }),
   );
 
+  // Profile picker status bar item.
+  profilePicker = new ProfilePicker(store, context);
+  context.subscriptions.push(profilePicker);
+
   // Daemon-level commands (start / stop / restart).
   registerDaemonCommands(context, folder.uri.fsPath);
 
@@ -117,4 +123,5 @@ export function deactivate(): void {
   store = null;
   tree = null;
   detailPanels = null;
+  profilePicker = null;
 }

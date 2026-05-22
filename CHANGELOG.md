@@ -5,6 +5,28 @@ All notable changes to the devup VS Code extension are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.0] — 2026-05-22
+
+Welcome view, configurable tree grouping, and profile filtering. Requires `@gachlab/devup` ≥ 0.10.1.
+
+### Added
+- **Welcome view** (#11) — when the daemon is not running, the sidebar shows a welcome card with a **Start daemon** button and a link to the devup docs. Disappears the moment the daemon connects.
+- **Group by phase** (#13) — new `devup.treeView.groupBy` setting: `"type"` (APIs / Webs, default), `"phase"` (phase 0, phase 1, …), or `"none"` (flat list). Switching the setting re-groups the tree live without reloading.
+- **Profile picker** (#12) — status-bar item shows the active profile (`profile: all` when none). Clicking it opens a QuickPick listing all profiles from the daemon's `info` RPC. Selecting a profile filters the tree to that profile's services. The active profile persists in workspace settings (`devup.profile`).
+
+### Changed
+- `ServiceSnapshot` now includes `phase: number` (from `status` RPC, added in devup 0.10.1).
+- `StatusStore` fetches `info` RPC at connection time to load project name and profiles.
+- Tree returns an empty list when disconnected so VS Code's `viewsWelcome` takes over.
+
+### Requires
+- `@gachlab/devup` ≥ 0.10.1 (adds `phase` to `status` response and exposes the `info` RPC).
+
+## [0.2.1] — 2026-05-22
+
+### Changed
+- **Local devup resolution** (#16) — daemon commands now use `npx devup` by default, which searches `node_modules/.bin` before the global PATH. New `devup.executablePath` setting to override with a custom binary path.
+
 ## [0.2.0] — 2026-05-22
 
 Visual depth + first-class daemon control. Three issues closed: #7, #10, #14.

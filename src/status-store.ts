@@ -7,9 +7,15 @@ export interface ServiceSnapshot {
   health: string;
   port: number;
   type: string;
+  phase: number;
   pid: number | null;
   errors: number;
   restarts: number;
+}
+
+export interface ProjectInfo {
+  project: string;
+  profiles: Record<string, string[]>;
 }
 
 export type ConnectionState = 'connecting' | 'connected' | 'unreachable';
@@ -20,6 +26,7 @@ export type ConnectionState = 'connecting' | 'connected' | 'unreachable';
  *  the daemon comes back up. */
 export class StatusStore implements vscode.Disposable {
   private readonly services = new Map<string, ServiceSnapshot>();
+  private info: ProjectInfo = { project: '', profiles: {} };
   private subscription: Subscription | null = null;
   private reconnectTimer: NodeJS.Timeout | null = null;
   private state: ConnectionState = 'connecting';
@@ -37,6 +44,7 @@ export class StatusStore implements vscode.Disposable {
     return [...this.services.values()];
   }
   getState(): ConnectionState { return this.state; }
+  getInfo(): ProjectInfo { return this.info; }
 
   private async connect(): Promise<void> {
     if (this.disposed) return;
@@ -46,9 +54,13 @@ export class StatusStore implements vscode.Disposable {
     // Probe with a quick `status` call first — gives us the snapshot synchronously
     // and surfaces errors before opening the streaming subscription.
     try {
-      const snapshot = await sendRpc(this.socketPath, 'status', {}, { timeoutMs: 2000 }) as { services: ServiceSnapshot[] };
+      const [snapshot, infoResult] = await Promise.all([
+        sendRpc(this.socketPath, 'status', {}, { timeoutMs: 2000 }) as Promise<{ services: ServiceSnapshot[] }>,
+        sendRpc(this.socketPath, 'info', {}, { timeoutMs: 2000 }).catch(() => null) as Promise<ProjectInfo | null>,
+      ]);
       this.services.clear();
       for (const s of snapshot.services ?? []) this.services.set(s.name, s);
+      if (infoResult) this.info = infoResult;
       this.state = 'connected';
       this.emitter.fire();
     } catch {
