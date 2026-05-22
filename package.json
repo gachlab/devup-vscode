@@ -1,0 +1,81 @@
+{
+  "name": "devup-vscode",
+  "displayName": "devup",
+  "description": "Sidebar tree, status bar, and live logs for @gachlab/devup — control your dev stack without leaving the editor.",
+  "version": "0.1.0",
+  "publisher": "gachlab",
+  "license": "MIT",
+  "engines": {
+    "vscode": "^1.85.0",
+    "node": ">=22"
+  },
+  "categories": [
+    "Other"
+  ],
+  "keywords": [
+    "devup",
+    "dev",
+    "monorepo",
+    "microservices",
+    "process-manager"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/gachlab/devup-vscode.git"
+  },
+  "homepage": "https://github.com/gachlab/devup-vscode#readme",
+  "bugs": {
+    "url": "https://github.com/gachlab/devup-vscode/issues"
+  },
+  "main": "./dist/extension.js",
+  "activationEvents": [
+    "workspaceContains:devup.config.ts",
+    "workspaceContains:devup.config.js",
+    "workspaceContains:devup.config.json"
+  ],
+  "contributes": {
+    "configuration": {
+      "title": "devup",
+      "properties": {
+        "devup.projectName": {
+          "type": "string",
+          "default": "",
+          "description": "Override the devup project name (normally auto-detected from devup.config.*). Used to resolve the control-plane socket at ~/.devup/sock-<name>.sock."
+        },
+        "devup.socketPath": {
+          "type": "string",
+          "default": "",
+          "description": "Override the control-plane socket path entirely. When set, devup.projectName is ignored."
+        },
+        "devup.pollIntervalMs": {
+          "type": "number",
+          "default": 3000,
+          "minimum": 500,
+          "description": "How often the status bar polls the control plane for status (milliseconds)."
+        }
+      }
+    },
+    "commands": [
+      {
+        "command": "devup.showStatus",
+        "title": "devup: Show status"
+      }
+    ]
+  },
+  "scripts": {
+    "build": "node esbuild.js",
+    "watch": "node esbuild.js --watch",
+    "vscode:prepublish": "npm run build -- --production",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint src --ext ts"
+  },
+  "devDependencies": {
+    "@types/node": "^22.15.3",
+    "@types/vscode": "^1.85.0",
+    "@typescript-eslint/eslint-plugin": "^8.0.0",
+    "@typescript-eslint/parser": "^8.0.0",
+    "esbuild": "^0.23.1",
+    "eslint": "^9.9.0",
+    "typescript": "^6.0.3"
+  }
+}
