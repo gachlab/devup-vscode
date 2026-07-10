@@ -266,7 +266,6 @@
     "watch": "node esbuild.js --watch",
     "vscode:prepublish": "npm run build -- --production",
     "typecheck": "tsc --noEmit",
-    "lint": "eslint src --ext ts",
     "test:unit": "node --import tsx --test \"tests/unit/**/*.test.ts\"",
     "test:integration": "npm run build && vscode-test",
     "test": "npm run test:unit"
@@ -274,13 +273,10 @@
   "devDependencies": {
     "@types/node": "^22.15.3",
     "@types/vscode": "^1.85.0",
-    "@typescript-eslint/eslint-plugin": "^8.0.0",
-    "@typescript-eslint/parser": "^8.0.0",
     "@vscode/test-cli": "^0.0.12",
     "@vscode/test-electron": "^2.5.2",
     "esbuild": "^0.23.1",
-    "eslint": "^9.9.0",
     "tsx": "^4.22.3",
-    "typescript": "^6.0.3"
+    "typescript": "^7.0.2"
   }
 }
