@@ -66,6 +66,10 @@ export function registerServiceCommands(
         return;
       }
       const url = buildServiceUrl(svc, info.port, store.getProxy());
+      // Do not reach for asExternalUri here: the API docs are explicit that
+      // "uris passed through openExternal are automatically resolved and you
+      // should not call asExternalUri on them" — doing both resolves twice and
+      // tunnels to a port nothing listens on.
       void vscode.env.openExternal(vscode.Uri.parse(url));
     }),
 

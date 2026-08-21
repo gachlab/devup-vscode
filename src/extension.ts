@@ -8,6 +8,7 @@ import { registerServiceCommands } from './commands.js';
 import { registerDaemonCommands } from './daemon-commands.js';
 import { ServiceDetailPanels } from './service-detail.js';
 import { ProfilePicker } from './profile-picker.js';
+import { PortForwarder } from './port-forward.js';
 
 let statusBar: DevupStatusBar | null = null;
 let logChannels: LogChannels | null = null;
@@ -15,6 +16,7 @@ let store: StatusStore | null = null;
 let tree: ServicesTreeProvider | null = null;
 let detailPanels: ServiceDetailPanels | null = null;
 let profilePicker: ProfilePicker | null = null;
+let portForwarder: PortForwarder | null = null;
 
 export function activate(context: vscode.ExtensionContext): void {
   const folder = vscode.workspace.workspaceFolders?.[0];
@@ -26,6 +28,13 @@ export function activate(context: vscode.ExtensionContext): void {
   store = new StatusStore(discovery.socketPath);
   store.start();
   context.subscriptions.push(store);
+
+  // Tunnel service ports back to the local machine when attached to a remote
+  // host — the daemon spawns services detached, so VS Code never auto-detects
+  // them. No-op in a local window.
+  portForwarder = new PortForwarder(store);
+  portForwarder.start();
+  context.subscriptions.push(portForwarder);
 
   // Live log streaming per service.
   logChannels = new LogChannels(discovery.socketPath);
@@ -134,4 +143,5 @@ export function deactivate(): void {
   tree = null;
   detailPanels = null;
   profilePicker = null;
+  portForwarder = null;
 }
