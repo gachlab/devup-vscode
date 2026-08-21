@@ -1,6 +1,7 @@
 import * as vscode from 'vscode';
 import { openStream, type Subscription, type StreamFrame } from './socket-client.js';
 import type { StatusStore, ServiceSnapshot } from './status-store.js';
+import { canonicalPort } from './forward-logic.js';
 
 /** One webview panel per service. Re-opens focus an existing panel instead
  *  of creating a duplicate. Each panel subscribes to logs.follow for its
@@ -18,7 +19,7 @@ export class ServiceDetailPanels implements vscode.Disposable {
     this.storeSub = store.onDidChange(() => {
       for (const [name, panel] of this.panels) {
         const svc = store.getAll().find(s => s.name === name);
-        if (svc) void panel.webview.postMessage({ type: 'svc', svc });
+        if (svc) void panel.webview.postMessage({ type: 'svc', svc, port: canonicalPort(svc) });
       }
     });
   }
@@ -76,7 +77,7 @@ export class ServiceDetailPanels implements vscode.Disposable {
     this.panels.set(svcName, panel);
 
     // Push current service state immediately so the panel doesn't sit empty.
-    void panel.webview.postMessage({ type: 'svc', svc });
+    void panel.webview.postMessage({ type: 'svc', svc, port: canonicalPort(svc) });
   }
 
   dispose(): void {
@@ -121,7 +122,7 @@ function renderHtml(svc: ServiceSnapshot): string {
 </head>
 <body>
   <h1 id="name">${escapeHtml(svc.name)}</h1>
-  <div class="sub">${escapeHtml(svc.type)} · :${svc.port}</div>
+  <div class="sub">${escapeHtml(svc.type)} · :${canonicalPort(svc)}</div>
 
   <div id="status-row">
     <span class="badge ${cssClass(svc.status)}" id="status-badge">${escapeHtml(svc.status)}</span>
@@ -129,7 +130,7 @@ function renderHtml(svc: ServiceSnapshot): string {
   </div>
 
   <dl class="grid">
-    <dt>Port</dt><dd id="port">${svc.port}</dd>
+    <dt>Port</dt><dd id="port">${canonicalPort(svc)}</dd>
     <dt>Type</dt><dd id="type">${escapeHtml(svc.type)}</dd>
     <dt>PID</dt><dd id="pid">${svc.pid ?? '—'}</dd>
     <dt>Errors</dt><dd id="errors">${svc.errors}</dd>
@@ -156,7 +157,7 @@ function renderHtml(svc: ServiceSnapshot): string {
     <dl class="grid" style="margin-top:8px">
       ${svc.cmd ? `<dt>cmd</dt><dd id="cfg-cmd" style="font-family:var(--vscode-editor-font-family)">${escapeHtml(svc.cmd)}</dd>` : ''}
       ${svc.cwd ? `<dt>cwd</dt><dd id="cfg-cwd" style="font-family:var(--vscode-editor-font-family)">${escapeHtml(svc.cwd)}</dd>` : ''}
-      <dt>port</dt><dd>${svc.port}</dd>
+      <dt>port</dt><dd>${canonicalPort(svc)}${canonicalPort(svc) !== svc.port ? ` (internal ${svc.port})` : ''}</dd>
       <dt>type</dt><dd>${escapeHtml(svc.type)}</dd>
       <dt>phase</dt><dd>${svc.phase}</dd>
     </dl>
@@ -221,6 +222,10 @@ function renderHtml(svc: ServiceSnapshot): string {
         const s = m.svc;
         setBadgeClass(statusBadge, s.status);
         setBadgeClass(healthBadge, s.health);
+        // Rendered once server-side, so it would otherwise go stale for the life
+        // of the panel — retainContextWhenHidden keeps it alive across upgrades.
+        const portEl = document.getElementById('port');
+        if (portEl && m.port) portEl.textContent = m.port;
         document.getElementById('pid').textContent      = s.pid ?? '—';
         document.getElementById('errors').textContent   = s.errors;
         document.getElementById('restarts').textContent = s.restarts;

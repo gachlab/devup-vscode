@@ -5,6 +5,23 @@ All notable changes to the devup VS Code extension are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.7.0] — 2026-08-21
+
+A minor rather than a patch: the default changes behaviour for anyone who never touched the setting, and Marketplace auto-update would apply it unasked.
+
+### Fixed
+- **Forwarded the wrong port for every lazy service** — 0.6.0 tunnelled the port from the status snapshot, believing it to be the configured one. It is not: devup runs a lazy service on `port + 10000` and keeps its own on-demand proxy on the configured port, and the snapshot reported only the rewritten value. So `authorization-api` was forwarded as `13002` instead of `3002` — reaching the service directly, bypassing the proxy that starts it, and missing the port the frontend calls. Only always-on services were unaffected, which is why `app-web` and `configurations-api` appeared to work.
+- **`devup: Open in browser` opened the rewritten port too**, for the same reason and with the same consequence.
+- **The sidebar, tooltip, quick-picks and detail panel showed the rewritten port**, so a port copied out of the UI was one that neither works nor is forwarded. They now show the port you can use; the tooltip and detail panel also name the internal one, which is what logs and debugger attachment use. The detail panel's port now updates live instead of keeping whatever was rendered when it opened.
+
+### Changed
+- **`devup.portForwarding` now defaults to `all`** rather than `web`. A frontend whose API calls do not resolve is not a working app, and `web` alone produced exactly that: pages that load and then fail against every backend. `web` remains for anyone who only wants the frontends reachable.
+
+  Worth knowing with `all`: devup's lazy proxy starts a service on a **bare TCP connection**, before any bytes arrive. So anything that merely connects to a forwarded API port — a browser preconnect, a local scanner — boots that service and resets its idle timer. Use `web`, or exclude specific ports via `remote.portsAttributes` → `onAutoForward: "ignore"`, if that matters more than reachability.
+
+### Requires
+- **`@gachlab/devup` ≥ 0.12.0**, which adds `originalPort` to the status snapshot. Note that 0.11.2 does *not* carry it. Deriving the configured port client-side is not safe — lazy mode is opt-in, so in a non-lazy stack every reported port is already real and a service configured on `18080` would be mangled into `8080`. Only the daemon knows which services it rewrote. Against an older daemon the extension keeps 0.6.0 behaviour rather than guessing.
+
 ## [0.6.0] — 2026-08-21
 
 ### Added

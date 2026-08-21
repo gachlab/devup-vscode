@@ -4,23 +4,45 @@ import type { ServiceSnapshot } from './types.js';
 
 export type ForwardMode = 'off' | 'web' | 'all';
 
-/** Normalise the raw setting value; anything unexpected falls back to 'web'. */
+/** Normalise the raw setting value; anything unexpected falls back to 'all'. */
 export function parseForwardMode(raw: unknown): ForwardMode {
-  return raw === 'off' || raw === 'all' ? raw : 'web';
+  return raw === 'off' || raw === 'web' ? raw : 'all';
 }
 
-/** Ports that should be tunnelled back to the local machine, deduped and sorted.
+/** The port a client must actually reach.
  *
- *  Uses each service's configured port rather than its lazy-mode override: devup
- *  keeps listening on the configured port and proxies to the override, so that is
- *  the one a browser must reach. */
+ *  The status snapshot reports a lazy service's *rewritten* port: devup replaces
+ *  `port` with `port + 10000`, runs the service there, and keeps its on-demand
+ *  proxy on the configured port. Reaching the rewritten one goes straight to the
+ *  service, bypassing the proxy that starts it, and is not the port anything is
+ *  configured to call.
+ *
+ *  `originalPort` (@gachlab/devup >= 0.12.0) is the configured port, and equals
+ *  `port` for always-on services. Undoing the offset ourselves is NOT a viable
+ *  fallback: lazy mode is opt-in, so in a non-lazy stack every reported port is
+ *  already real and a service configured on 18080 would be mangled into 8080.
+ *  Only the daemon knows which services it rewrote, so an older daemon simply
+ *  gets the old behaviour. */
+export function canonicalPort(svc: Pick<ServiceSnapshot, 'port' | 'originalPort'>): number {
+  const { originalPort, port } = svc;
+  return isUsablePort(originalPort) ? originalPort : port;
+}
+
+function isUsablePort(port: unknown): port is number {
+  return Number.isInteger(port) && (port as number) > 0 && (port as number) <= 65535;
+}
+
+/** Ports that should be tunnelled back to the local machine, deduped and sorted. */
 export function selectForwardPorts(services: readonly ServiceSnapshot[], mode: ForwardMode): number[] {
   if (mode === 'off') return [];
   const wanted = new Set<number>();
   for (const s of services) {
     if (mode === 'web' && s.type !== 'web') continue;
-    if (!Number.isInteger(s.port) || s.port <= 0 || s.port > 65535) continue;
-    wanted.add(s.port);
+    // Validate what we are about to forward, not what the snapshot happened to
+    // carry: canonicalPort may return originalPort, which needs checking too.
+    const port = canonicalPort(s);
+    if (!isUsablePort(port)) continue;
+    wanted.add(port);
   }
   return [...wanted].sort((a, b) => a - b);
 }

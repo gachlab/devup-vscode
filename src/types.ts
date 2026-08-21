@@ -5,6 +5,11 @@ export interface ServiceSnapshot {
   status: string;
   health: string;
   port: number;
+  /** Present from @gachlab/devup >= 0.12.0 — 0.11.2 does not carry it. For a
+   *  lazy service, `port` is the rewritten internal port and this is the
+   *  configured one the proxy listens on; for an always-on service the two are
+   *  the same. */
+  originalPort?: number;
   type: string;
   phase: number;
   cmd?: string;
