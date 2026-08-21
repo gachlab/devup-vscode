@@ -5,7 +5,7 @@ All notable changes to the devup VS Code extension are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [0.6.0] — 2026-08-21
 
 ### Added
 - **Automatic port forwarding in remote windows** — when the window is attached to a remote host (Remote-SSH, Dev Containers, WSL, Codespaces), devup service ports are tunnelled back to you and show up in the Ports view. VS Code auto-forwards only the ports it observes being opened, and the daemon spawns its services detached, so none were ever detected. Controlled by `devup.portForwarding` (`web` — default, `all`, `off`). Idle in local windows.
