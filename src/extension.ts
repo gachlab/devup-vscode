@@ -9,6 +9,7 @@ import { registerDaemonCommands } from './daemon-commands.js';
 import { ServiceDetailPanels } from './service-detail.js';
 import { ProfilePicker } from './profile-picker.js';
 import { PortForwarder } from './port-forward.js';
+import { canonicalPort } from './forward-logic.js';
 
 let statusBar: DevupStatusBar | null = null;
 let logChannels: LogChannels | null = null;
@@ -93,7 +94,7 @@ export function activate(context: vscode.ExtensionContext): void {
         const all = store!.getAll();
         if (!all.length) { void vscode.window.showInformationMessage('devup: no services available.'); return; }
         const picked = await vscode.window.showQuickPick(
-          all.map(s => ({ label: s.name, description: `:${s.port}  ${s.status}/${s.health}`, svc: s.name })),
+          all.map(s => ({ label: s.name, description: `:${canonicalPort(s)}  ${s.status}/${s.health}`, svc: s.name })),
           { placeHolder: 'Open detail panel for which service?' },
         );
         svcName = picked?.svc;

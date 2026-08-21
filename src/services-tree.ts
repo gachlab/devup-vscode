@@ -2,6 +2,7 @@ import * as vscode from 'vscode';
 import type { StatusStore, ServiceSnapshot } from './status-store.js';
 import { formatCpu, formatMem } from './url-builder.js';
 import { buildPhaseGroups } from './tree-logic.js';
+import { canonicalPort } from './forward-logic.js';
 export { buildPhaseGroups };
 
 type Node =
@@ -101,7 +102,7 @@ function serviceItem(svc: ServiceSnapshot, store: StatusStore): vscode.TreeItem 
   const item = new vscode.TreeItem(svc.name, vscode.TreeItemCollapsibleState.None);
   const stats = store.getServiceStats(svc.name);
   const statsStr = stats ? `  · ${formatCpu(stats.cpu)} · ${formatMem(stats.memMB)}` : '';
-  item.description = `:${svc.port}  ${svc.status}/${svc.health}${statsStr}`;
+  item.description = `:${canonicalPort(svc)}  ${svc.status}/${svc.health}${statsStr}`;
   item.iconPath = stats ? resourceIcon(svc, stats) : healthIcon(svc);
   item.contextValue = `service-${svc.type}`;
   item.command = { command: 'devup.tailLogs', title: 'Tail logs', arguments: [svc.name] };
@@ -136,7 +137,10 @@ function healthIcon(svc: ServiceSnapshot): vscode.ThemeIcon {
 function buildTooltip(svc: ServiceSnapshot, stats: import('./status-store.js').ServiceStats | null): vscode.MarkdownString {
   const md = new vscode.MarkdownString();
   md.appendMarkdown(`**${svc.name}**\n\n`);
-  md.appendMarkdown(`- port: ${svc.port}\n`);
+  md.appendMarkdown(`- port: ${canonicalPort(svc)}\n`);
+  // Surface the lazy rewrite rather than hiding it: useful when attaching a
+  // debugger or reading logs, where the service's own port is what shows up.
+  if (canonicalPort(svc) !== svc.port) md.appendMarkdown(`- internal port: ${svc.port}\n`);
   md.appendMarkdown(`- type: ${svc.type} · phase: ${svc.phase}\n`);
   md.appendMarkdown(`- status: ${svc.status} · health: ${svc.health}\n`);
   if (stats) md.appendMarkdown(`- cpu: ${formatCpu(stats.cpu)} · mem: ${formatMem(stats.memMB)}\n`);

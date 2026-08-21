@@ -2,6 +2,7 @@ import * as vscode from 'vscode';
 import { sendRpc, RpcCallError } from './socket-client.js';
 import type { StatusStore, ServiceSnapshot } from './status-store.js';
 import { buildServiceUrl } from './url-builder.js';
+import { canonicalPort } from './forward-logic.js';
 import type { LogChannels } from './log-channels.js';
 
 import { extractSvcName } from './svc-name.js';
@@ -18,7 +19,7 @@ async function resolveServiceName(arg: ServiceArg, store: StatusStore, prompt: s
     void vscode.window.showInformationMessage('devup: no services available.');
     return null;
   }
-  const items = all.map(s => ({ label: s.name, description: `:${s.port}  ${s.status}/${s.health}`, svc: s.name }));
+  const items = all.map(s => ({ label: s.name, description: `:${canonicalPort(s)}  ${s.status}/${s.health}`, svc: s.name }));
   const picked = await vscode.window.showQuickPick(items, { placeHolder: prompt });
   return picked?.svc ?? null;
 }
@@ -65,7 +66,10 @@ export function registerServiceCommands(
         void vscode.window.showWarningMessage(`devup: "${svc}" not found.`);
         return;
       }
-      const url = buildServiceUrl(svc, info.port, store.getProxy());
+      // canonicalPort, not info.port: for a lazy service the snapshot carries
+      // the rewritten port, and opening that reaches the service directly
+      // instead of the proxy that starts it on demand.
+      const url = buildServiceUrl(svc, canonicalPort(info), store.getProxy());
       // Do not reach for asExternalUri here: the API docs are explicit that
       // "uris passed through openExternal are automatically resolved and you
       // should not call asExternalUri on them" — doing both resolves twice and
