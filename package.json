@@ -61,6 +61,22 @@
           "default": "",
           "description": "Path to devup executable. If empty, uses 'npx devup' which searches node_modules first, then global PATH."
         },
+        "devup.portForwarding": {
+          "type": "string",
+          "scope": "machine",
+          "enum": [
+            "web",
+            "all",
+            "off"
+          ],
+          "enumDescriptions": [
+            "Forward web service ports only — default",
+            "Forward every service port, APIs included",
+            "Stop forwarding new ports. Tunnels already open stay open; close them from the Ports view."
+          ],
+          "default": "web",
+          "description": "In a remote window (Remote-SSH, Dev Containers, WSL, Codespaces), ask the editor to tunnel devup service ports back to you. The daemon spawns services detached, so VS Code cannot auto-detect them. The Ports view shows the address to use: usually http://localhost:<port>, though the editor remaps the port when it is already taken locally, and Codespaces publishes to a hosted URL instead. Individual ports can be excluded with remote.portsAttributes onAutoForward \"ignore\". Ignored in local windows."
+        },
         "devup.treeView.groupBy": {
           "type": "string",
           "enum": [

@@ -5,6 +5,22 @@ All notable changes to the devup VS Code extension are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+- **Automatic port forwarding in remote windows** — when the window is attached to a remote host (Remote-SSH, Dev Containers, WSL, Codespaces), devup service ports are tunnelled back to you and show up in the Ports view. VS Code auto-forwards only the ports it observes being opened, and the daemon spawns its services detached, so none were ever detected. Controlled by `devup.portForwarding` (`web` — default, `all`, `off`). Idle in local windows.
+
+  Reaching a service: the **Ports view is the source of truth** for the address. It is usually `http://localhost:<port>`, with two exceptions —
+  - **The local port can differ.** If the port is already bound on your machine — likely if you also run the stack locally — the editor remaps it.
+  - **Codespaces and Remote Tunnels publish to a hosted URL** rather than binding a local port, since there is no local machine to bind on.
+
+  Opting out: `off` stops new forwards, and individual ports can be excluded with `remote.portsAttributes` → `onAutoForward: "ignore"` (exact ports and `low-high` ranges). The setting is `machine`-scoped, so a repo-committed `.vscode/settings.json` cannot decide to open network paths onto a collaborator's machine.
+
+  Not covered: with devup's reverse proxy active, `devup: Open in browser` targets `<sub>.<domain>`, which resolves on the remote host and not on yours. The underlying service ports are still forwarded, so reach them through the Ports view address.
+
+### Internal
+- New vscode-free module `src/forward-logic.ts` (`selectForwardPorts`, `parseForwardMode`, `isPortIgnored`) with 14 unit tests.
+
 ## [0.5.0] — 2026-05-22
 
 UX improvements across tree view, detail panel, and notifications. Requires `@gachlab/devup` ≥ 0.11.1.
