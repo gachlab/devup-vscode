@@ -71,3 +71,36 @@ function matchesPortKey(key: string, port: number): boolean {
   if (!range) return false;
   return port >= Number(range[1]) && port <= Number(range[2]);
 }
+
+/** What a change in the daemon's connection state means for forwarding.
+ *
+ *  Extracted because the version of this living inside `PortForwarder` got the
+ *  distinction between a *level* and a *transition* wrong: it resumed whenever
+ *  the state *was* connected, and the store fires every few seconds, so a
+ *  pause requested while the daemon was up survived about three seconds before
+ *  every port the user had just closed was re-asserted. */
+export type ForwardReaction = 'resume' | 'warn' | 'none';
+
+export interface ForwardReactionInput {
+  previous: string | null;
+  next: string;
+  /** Forwarding was paused by `devup: Close forwarded ports…`. */
+  paused: boolean;
+  /** The user asked for this restart, so the drop is expected. */
+  restartExpected: boolean;
+  /** Only a remote window has tunnels at all. */
+  remote: boolean;
+  /** Whether anything was ever forwarded to warn about. */
+  hasRequested: boolean;
+}
+
+export function reactToState(input: ForwardReactionInput): ForwardReaction {
+  const { previous, next } = input;
+  // A transition into connected, not the fact of being connected.
+  if (next === 'connected') return previous !== 'connected' && input.paused ? 'resume' : 'none';
+  if (previous !== 'connected') return 'none';
+  // `unreachable` specifically: a retarget passes through `connecting`, and a
+  // start or restart the user asked for is not news.
+  if (next !== 'unreachable' || input.restartExpected) return 'none';
+  return input.remote && input.hasRequested ? 'warn' : 'none';
+}

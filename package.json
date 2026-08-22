@@ -49,7 +49,7 @@
         "devup.projectName": {
           "type": "string",
           "default": "",
-          "description": "Override the devup project name (normally auto-detected from devup.config.*). Used to resolve the control-plane socket at ~/.devup/sock-<name>.sock."
+          "description": "Override the devup project name (normally auto-detected from devup.config.*). Used to resolve the control-plane socket at ~/.devup/sock-<name>.sock, and the log folder at ~/.devup/logs/<name>/ — the latter even when devup.socketPath is set, which otherwise ignores this."
         },
         "devup.socketPath": {
           "type": "string",

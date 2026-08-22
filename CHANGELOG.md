@@ -32,7 +32,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - New vscode-free module `src/log-paths.ts`, checked against devup's log-path rule name by name — which is *not* the socket-path rule: `LogSink` trims leading underscores where `defaultSocketPath` keeps them, so one project genuinely has `logs/gachlab_web/` and `sock-_gachlab_web.sock`.
 - New vscode-free module `src/service-map.ts` — applying one stream frame to the service map, including the entries it must refuse.
 - New vscode-free modules `src/config-file.ts` (the config scanner, tested against real files on disk), `src/socket-path.ts` (checked against devup's own rule name by name) and `src/diagnosis.ts` (which of the four situations we are in, and the text for it). `StatusStore` owns its socket path and re-connects through `setSocketPath()`; `LogChannels` and `ServiceDetailPanels` take a `() => string` and expose `retarget()`, so nothing captures a path a rename can invalidate.
-- 120 new unit tests, each verified by mutation.
+- 128 new unit tests, each verified by mutation.
 
 ## [0.7.0] — 2026-08-21
 

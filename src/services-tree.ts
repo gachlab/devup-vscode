@@ -124,7 +124,9 @@ function serviceItem(svc: ServiceSnapshot, store: StatusStore, forwarder?: PortF
   // Plain text: TreeItem.description is documented as "a human-readable
   // string", and codicon substitution is only defined for status-bar and
   // language-status text — `$(radio-tower)` would render literally here.
-  const forwarded = forwarder?.isForwarded(canonicalPort(svc)) ? '  · forwarded' : '';
+  const forwarded = forwarder?.isForwarded(canonicalPort(svc))
+    ? (forwarder.isPaused() ? '  · forwarding paused' : '  · forwarded')
+    : '';
   item.description = `:${canonicalPort(svc)}  ${svc.status}/${svc.health}${statsStr}${forwarded}`;
   item.iconPath = stats ? resourceIcon(svc, stats) : healthIcon(svc);
   item.contextValue = `service-${svc.type}`;

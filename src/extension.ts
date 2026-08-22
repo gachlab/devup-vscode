@@ -82,6 +82,10 @@ export function activate(context: vscode.ExtensionContext): void {
           'devup: port forwarding paused. It resumes when the daemon next connects, or when you change devup.portForwarding.',
         );
       } catch {
+        // Nothing was closed, so nothing should stay paused — otherwise ports
+        // the user closes from the Ports view instead are never re-asserted
+        // and there is no way back short of reconnecting.
+        portForwarder.resume();
         void vscode.window.showWarningMessage(
           'devup: this editor does not offer a close-port picker. Close them from the Ports view.',
         );
@@ -137,6 +141,11 @@ export function activate(context: vscode.ExtensionContext): void {
   // `devup.socketPath` set, where it holds a placeholder rather than a name.
   const projectName = (): string | null =>
     activeStore.getInfo().project
+    // Read directly rather than through discovery: `devup.projectName` is
+    // ignored for the socket path when `devup.socketPath` is set, but it is
+    // still the only name a user can give the log path — and it is what the
+    // "the project name is not known" message tells them to set.
+    || vscode.workspace.getConfiguration('devup', discovery.folder).get<string>('projectName')?.trim()
     || (discovery.source === 'socketPath setting' ? null : discovery.projectName);
   registerServiceCommands(context, activeStore, activeLogChannels, socketPath, folderPath, projectName);
 

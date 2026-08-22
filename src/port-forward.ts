@@ -1,6 +1,6 @@
 import * as vscode from 'vscode';
 import type { StatusStore } from './status-store.js';
-import { isPortIgnored, parseForwardMode, selectForwardPorts, type ForwardMode } from './forward-logic.js';
+import { isPortIgnored, parseForwardMode, reactToState, selectForwardPorts, type ForwardMode } from './forward-logic.js';
 
 /** Asks the editor to tunnel devup service ports back to the local machine.
  *
@@ -47,15 +47,29 @@ export class PortForwarder implements vscode.Disposable {
 
   constructor(private readonly store: StatusStore) {}
 
-  /** Stop re-asserting until the daemon next connects. */
+  /** Stop re-asserting until the daemon next connects.
+   *
+   *  Deliberately keeps the record of what was requested. The picker gives no
+   *  result back, so a user who cancels it — or closes one port of five —
+   *  leaves tunnels open; forgetting them here would disarm the outage warning
+   *  for exactly the ports it exists for. */
   pause(): void {
     if (this.paused) return;
     this.paused = true;
     this.lastWanted = '';
-    if (this.requested.size) {
-      this.requested.clear();
-      this.changeEmitter.fire();
-    }
+    this.changeEmitter.fire();
+  }
+
+  /** Undo a pause that turned out not to be wanted. */
+  resume(): void {
+    if (!this.paused) return;
+    this.paused = false;
+    this.lastWanted = '';
+    void this.sync();
+  }
+
+  isPaused(): boolean {
+    return this.paused;
   }
 
   /** Whether a forward has been requested for this port. */
@@ -97,19 +111,16 @@ export class PortForwarder implements vscode.Disposable {
     const state = this.store.getState();
     const previous = this.lastState;
     this.lastState = state;
-    if (state === 'connected') {
-      // A working daemon is the signal to start forwarding again after a
-      // manual close.
-      if (this.paused) { this.paused = false; this.lastWanted = ''; void this.sync(); }
-      return;
-    }
-    if (previous !== 'connected') return;
-    // Only a daemon that went away unasked. A rename retargets the store,
-    // which passes through 'connecting'; a start or restart the user asked for
-    // opens the store's fast-retry window. Warning about either would be
-    // warning someone about something they just did.
-    if (state !== 'unreachable' || this.store.isRestartExpected()) return;
-    if (!vscode.env.remoteName || !this.requested.size) return;
+    const reaction = reactToState({
+      previous,
+      next: state,
+      paused: this.paused,
+      restartExpected: this.store.isRestartExpected(),
+      remote: !!vscode.env.remoteName,
+      hasRequested: this.requested.size > 0,
+    });
+    if (reaction === 'resume') { this.resume(); return; }
+    if (reaction !== 'warn') return;
     const count = this.requested.size;
     // Whatever was open is now pointing at nothing; stop claiming otherwise.
     this.requested.clear();
