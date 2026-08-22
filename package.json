@@ -336,7 +336,7 @@
         },
         {
           "command": "devup.openInBrowser",
-          "when": "view == devupServices && viewItem =~ /service-web/",
+          "when": "view == devupServices && viewItem =~ /^(debug-)?service-web$/",
           "group": "1_actions@2"
         },
         {
@@ -367,7 +367,7 @@
         {
           "command": "devup.stopDebugging",
           "when": "view == devupServices && viewItem =~ /^debug-service-/",
-          "group": "1_actions@7"
+          "group": "1_actions@8"
         },
         {
           "command": "devup.copyUrl",

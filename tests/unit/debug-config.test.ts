@@ -1,7 +1,7 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import { join } from 'node:path';
-import { buildAttachConfig, resolveServiceCwd } from '../../src/debug-config.js';
+import { buildAttachConfig, resolveServiceCwd, SESSION_PREFIX } from '../../src/debug-config.js';
 
 describe('buildAttachConfig', () => {
   const config = buildAttachConfig('app-api', 39481, '/w/app/api');
@@ -20,9 +20,15 @@ describe('buildAttachConfig', () => {
 
   it('roots source maps at the service, not the workspace', () => {
     assert.equal(config.cwd, '/w/app/api');
-    assert.equal(config.localRoot, '/w/app/api');
-    assert.equal(config.remoteRoot, '/w/app/api');
     assert.equal(config.sourceMaps, true);
+  });
+
+  it('declares no remote path rebase', () => {
+    // localRoot/remoteRoot map paths under remoteRoot and drop everything
+    // else, so pinning them to the service directory would leave a breakpoint
+    // in a sibling package of a monorepo unbound. The attach is same-host.
+    assert.ok(!('localRoot' in config), 'localRoot should not be set');
+    assert.ok(!('remoteRoot' in config), 'remoteRoot should not be set');
   });
 
   it('does not ask the adapter to reattach', () => {
@@ -66,5 +72,14 @@ describe('the port the config is built from', () => {
     // 9229 is never a safe assumption.
     assert.equal(buildAttachConfig('a', 40001, '/w').port, 40001);
     assert.equal(buildAttachConfig('a', 33333, '/w').port, 33333);
+  });
+});
+
+describe('SESSION_PREFIX', () => {
+  it('is the prefix the session name is built from', () => {
+    // The extension recognises its own debug sessions by this, to avoid
+    // attaching twice to an inspector that serves one debugger at a time.
+    assert.ok(buildAttachConfig('app-api', 1, '/w').name.startsWith(SESSION_PREFIX));
+    assert.equal(buildAttachConfig('app-api', 1, '/w').name.slice(SESSION_PREFIX.length), 'app-api');
   });
 });

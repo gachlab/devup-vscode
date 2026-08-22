@@ -2,7 +2,7 @@ import * as vscode from 'vscode';
 import { sendRpc, RpcCallError } from './socket-client.js';
 import type { StatusStore } from './status-store.js';
 import { extractSvcName } from './svc-name.js';
-import { buildAttachConfig, resolveServiceCwd } from './debug-config.js';
+import { buildAttachConfig, resolveServiceCwd, SESSION_PREFIX } from './debug-config.js';
 
 /** Debugging a service used to mean stopping it in devup, running it by hand
  *  outside, and giving up watch, health checks and restarts while you did
@@ -30,6 +30,20 @@ interface DebugResult {
   ok: boolean;
 }
 
+/** The protocol is a hand-written copy that nothing validates (CLAUDE.md rule
+ *  2), and `sendRpc` resolves the response's `result` field verbatim — so a
+ *  daemon answering `null`, or with no result at all, reaches here as
+ *  something that has no `ok` to read. */
+function isDebugResult(value: unknown): value is DebugResult {
+  return !!value
+    && typeof value === 'object'
+    && typeof (value as DebugResult).ok === 'boolean';
+}
+
+/** Distinguishes "the call failed and the user has been told" from a result
+ *  that merely happens to be falsy. */
+type Attempt<T> = { ok: true; value: T } | { ok: false };
+
 export function registerDebugCommands(
   context: vscode.ExtensionContext,
   store: StatusStore,
@@ -37,6 +51,23 @@ export function registerDebugCommands(
   workspaceRoot: () => string,
   folder: () => vscode.WorkspaceFolder,
 ): void {
+  // Node's inspector serves one debugger at a time, and `debugPort` stays set
+  // for as long as you are attached — which is exactly the state the
+  // attach-without-restarting branch keys on. Without this, running the
+  // command twice on the same service produces a raw adapter connection error.
+  // The stable API exposes no list of sessions, so we keep our own.
+  const attached = new Set<string>();
+  context.subscriptions.push(
+    vscode.debug.onDidStartDebugSession(session => {
+      const name = sessionServiceName(session.name);
+      if (name) attached.add(name);
+    }),
+    vscode.debug.onDidTerminateDebugSession(session => {
+      const name = sessionServiceName(session.name);
+      if (name) attached.delete(name);
+    }),
+  );
+
   context.subscriptions.push(
     vscode.commands.registerCommand('devup.debugService', async (arg?: string | Record<string, unknown>) => {
       const svcName = await pickService(arg, store, 'Debug which service?');
@@ -46,19 +77,25 @@ export function registerDebugCommands(
       // config comes up that way, and a watch-triggered restart ends the
       // session while leaving the service debugged on a new port. Restarting
       // it again would throw away the state the user is here to look at.
+      if (attached.has(svcName)) {
+        void vscode.window.showInformationMessage(`devup: already debugging "${svcName}".`);
+        return;
+      }
+
       const live = store.getAll().find(s => s.name === svcName);
       if (typeof live?.debugPort === 'number') {
         await attach(svcName, live.debugPort, live.cwd, workspaceRoot(), folder());
         return;
       }
 
-      const result = await withProgress(`devup: restarting "${svcName}" under the inspector…`, async () => {
+      const attempt = await withProgress(`devup: restarting "${svcName}" under the inspector…`, async () =>
         // Not pre-checked against `cmd`: the daemon decides what it can
         // inspect, and its refusal ("does not run node") is the better message.
-        return await sendRpc(socketPath(), 'debug', { svc: svcName, enable: true },
-          { timeoutMs: DEBUG_RPC_TIMEOUT_MS }) as DebugResult;
-      });
-      if (result === null) return;
+        await sendRpc(socketPath(), 'debug', { svc: svcName, enable: true },
+          { timeoutMs: DEBUG_RPC_TIMEOUT_MS }),
+      );
+      if (!attempt.ok) return;
+      const result = attempt.value;
 
       if (!result.ok) {
         // The daemon rolls the flag back when the restart fails, so the service
@@ -83,7 +120,9 @@ export function registerDebugCommands(
     }),
 
     vscode.commands.registerCommand('devup.stopDebugging', async (arg?: string | Record<string, unknown>) => {
-      // Every service, not only those reporting a port. The daemon nulls
+      // Every service, not only those reporting a port — and the tree entry,
+      // which can only key on the live port, is deliberately not the whole
+      // story here. The daemon nulls
       // `debugPort` whenever the process is not running and never publishes the
       // `debug` flag itself, so a debugged service that is stopped or crashed
       // looks identical to one that was never debugged — while the flag is
@@ -91,11 +130,12 @@ export function registerDebugCommands(
       const svcName = await pickService(arg, store, 'Stop debugging which service?');
       if (!svcName) return;
 
-      const result = await withProgress(`devup: restarting "${svcName}" without the inspector…`, async () => {
-        return await sendRpc(socketPath(), 'debug', { svc: svcName, enable: false },
-          { timeoutMs: DEBUG_RPC_TIMEOUT_MS }) as DebugResult;
-      });
-      if (result === null) return;
+      const attempt = await withProgress(`devup: restarting "${svcName}" without the inspector…`, async () =>
+        await sendRpc(socketPath(), 'debug', { svc: svcName, enable: false },
+          { timeoutMs: DEBUG_RPC_TIMEOUT_MS }),
+      );
+      if (!attempt.ok) return;
+      const result = attempt.value;
 
       // Turning the inspector off can fail too, and the daemon deliberately
       // does not roll that back — reporting success here would be a lie.
@@ -108,11 +148,19 @@ export function registerDebugCommands(
   );
 }
 
-/** Runs an RPC behind a progress notification. Returns null when it failed,
- *  having already reported why. */
-async function withProgress<T>(title: string, run: () => Promise<T>): Promise<T | null> {
+/** Runs the debug RPC behind a progress notification. Reports failure to the
+ *  user and says so in the return, rather than handing back a value the caller
+ *  has to tell apart from a legitimate one. */
+async function withProgress(title: string, run: () => Promise<unknown>): Promise<Attempt<DebugResult>> {
   try {
-    return await vscode.window.withProgress({ location: vscode.ProgressLocation.Notification, title }, run);
+    const value = await vscode.window.withProgress(
+      { location: vscode.ProgressLocation.Notification, title }, run,
+    );
+    if (!isDebugResult(value)) {
+      void vscode.window.showErrorMessage('devup: the daemon gave an answer this extension does not understand.');
+      return { ok: false };
+    }
+    return { ok: true, value };
   } catch (e) {
     const message = e instanceof RpcCallError || e instanceof Error ? e.message : String(e);
     // A daemon that predates the RPC answers with this rather than anything a
@@ -122,7 +170,7 @@ async function withProgress<T>(title: string, run: () => Promise<T>): Promise<T 
         ? 'devup: this daemon cannot start a service under the inspector. Needs @gachlab/devup 0.14.0 or newer.'
         : `devup: ${message}`,
     );
-    return null;
+    return { ok: false };
   }
 }
 
@@ -152,6 +200,11 @@ function waitForDebugPort(store: StatusStore, svcName: string): Promise<number |
   });
 }
 
+/** The service behind one of our session names, or null for anyone else's. */
+function sessionServiceName(sessionName: string): string | null {
+  return sessionName.startsWith(SESSION_PREFIX) ? sessionName.slice(SESSION_PREFIX.length) : null;
+}
+
 async function attach(
   svcName: string,
   port: number,
@@ -160,9 +213,15 @@ async function attach(
   folder: vscode.WorkspaceFolder,
 ): Promise<void> {
   const cwd = resolveServiceCwd(svcCwd, workspaceRoot) ?? workspaceRoot;
-  const started = await vscode.debug.startDebugging(folder, buildAttachConfig(svcName, port, cwd));
-  if (!started) {
+  try {
+    // A false return and a rejection both mean it did not attach; only the
+    // first was being reported.
+    const started = await vscode.debug.startDebugging(folder, buildAttachConfig(svcName, port, cwd));
+    if (started) return;
     void vscode.window.showErrorMessage(`devup: could not attach to "${svcName}" on port ${port}.`);
+  } catch (e) {
+    const message = e instanceof Error ? e.message : String(e);
+    void vscode.window.showErrorMessage(`devup: could not attach to "${svcName}" on port ${port} — ${message}`);
   }
 }
 
