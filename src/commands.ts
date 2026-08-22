@@ -1,5 +1,7 @@
+import { existsSync } from 'node:fs';
 import * as vscode from 'vscode';
 import { sendRpc, RpcCallError } from './socket-client.js';
+import { logDirFor, logFileFor } from './log-paths.js';
 import type { StatusStore, ServiceSnapshot } from './status-store.js';
 import { buildServiceUrl } from './url-builder.js';
 import { canonicalPort } from './forward-logic.js';
@@ -30,6 +32,9 @@ export function registerServiceCommands(
   logChannels: LogChannels,
   socketPath: () => string,
   workspaceRoot: () => string,
+  /** The daemon's own project name, or null when it is not known — which is
+   *  not the same as empty, and must not be papered over with a placeholder. */
+  projectName: () => string | null,
 ): void {
   context.subscriptions.push(
     vscode.commands.registerCommand('devup.tailLogs', async (arg?: ServiceArg) => {
@@ -99,6 +104,55 @@ export function registerServiceCommands(
       term.show();
     }),
 
+    vscode.commands.registerCommand('devup.copyUrl', async (arg?: ServiceArg) => {
+      const svc = await resolveServiceName(arg, store, 'Copy the URL of which service?');
+      if (!svc) return;
+      const info = store.getAll().find(s => s.name === svc);
+      if (!info) { void vscode.window.showWarningMessage(`devup: "${svc}" not found.`); return; }
+      // Same URL `Open in browser` uses, proxy route and all — the one thing
+      // most often wanted and, until now, unavailable at any speed (issue #44).
+      const url = buildServiceUrl(svc, canonicalPort(info), store.getProxy());
+      await vscode.env.clipboard.writeText(url);
+      void vscode.window.showInformationMessage(`devup: copied ${url}`);
+    }),
+
+    vscode.commands.registerCommand('devup.openLogFile', async (arg?: ServiceArg) => {
+      const svc = await resolveServiceName(arg, store, 'Open the log file of which service?');
+      if (!svc) return;
+      const project = projectName();
+      if (!project) { void vscode.window.showWarningMessage(NO_PROJECT_NAME); return; }
+      const file = logFileFor(project, svc, logDirOverride());
+      if (!existsSync(file)) {
+        // Rotated per launch, so "not yet" is a normal state rather than an
+        // error — and the path is what someone needs in order to check.
+        void vscode.window.showWarningMessage(`devup: no log file for "${svc}" yet.\n${file}`);
+        return;
+      }
+      const doc = await vscode.workspace.openTextDocument(vscode.Uri.file(file));
+      await vscode.window.showTextDocument(doc, { preview: false });
+    }),
+
+    vscode.commands.registerCommand('devup.revealLogs', async () => {
+      const project = projectName();
+      if (!project) { void vscode.window.showWarningMessage(NO_PROJECT_NAME); return; }
+      const dir = logDirFor(project, logDirOverride());
+      if (!existsSync(dir)) {
+        void vscode.window.showWarningMessage(`devup: no logs folder yet.\n${dir}`);
+        return;
+      }
+      if (vscode.env.remoteName) {
+        // The logs are on the remote host, where the daemon runs, and
+        // `revealFileInOS` would open a file manager on the local machine —
+        // pointed at a path that does not exist there.
+        const choice = await vscode.window.showInformationMessage(
+          `devup: logs are on the remote host at ${dir}`, 'Copy path',
+        );
+        if (choice) await vscode.env.clipboard.writeText(dir);
+        return;
+      }
+      await vscode.commands.executeCommand('revealFileInOS', vscode.Uri.file(dir));
+    }),
+
     vscode.commands.registerCommand('devup.refresh', () => {
       // Reconnecting is autonomous, but it backs off to 30 s while the daemon
       // stays down — so someone who has just started one should not have to
@@ -107,6 +161,19 @@ export function registerServiceCommands(
       store.refresh();
     }),
   );
+}
+
+/** Logs live under the project name, which with `devup.socketPath` set is a
+ *  thing the extension genuinely does not know: discovery has no name to
+ *  report, and the daemon's `info` RPC is allowed to fail. Building a path out
+ *  of a placeholder would send someone looking for a file that cannot exist. */
+const NO_PROJECT_NAME = 'devup: the project name is not known, so the log path cannot be resolved. '
+  + 'Set devup.projectName, or wait for the daemon to answer.';
+
+/** `devup --log-dir` moves the root and the daemon does not publish where to,
+ *  so anyone using it has to say so here. */
+function logDirOverride(): string | undefined {
+  return vscode.workspace.getConfiguration('devup').get<string>('logDir')?.trim() || undefined;
 }
 
 function rpcMessage(e: unknown): string {

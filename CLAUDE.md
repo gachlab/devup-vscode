@@ -29,6 +29,10 @@ Three more mirrors, all of which have drifted at least once:
 - `src/socket-path.ts` ↔ devup's `defaultSocketPath`. The extension used to
   strip leading underscores, so `@gachlab/web` resolved to
   `sock-gachlab_web.sock` while the daemon listened on `sock-_gachlab_web.sock`.
+- `src/log-paths.ts` ↔ devup's `LogSink` / `devup logs`. **Different rule from
+  the one above**, in devup itself: the log sanitiser *does* trim underscores.
+  The same project has `logs/gachlab_web/` and `sock-_gachlab_web.sock`. Do not
+  tidy that away by sharing one function.
 - `CONFIG_FILES` in `src/config-file.ts` ↔ devup's `CONFIG_NAMES`
   (`src/config/loader.ts`) — **same names, same order**. Both take the first
   that exists, so a repo with a `.ts` and a `.json` runs under one name and

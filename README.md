@@ -34,6 +34,10 @@ Talks to a running devup daemon via its Unix-socket control plane — no separat
 | Follows a project rename — discovery re-runs on config and setting changes | 0.8.0 |
 | Welcome view explains *why* the daemon is unreachable, with the action to fix it | 0.8.0 |
 | Services dropped by a hot reload leave the sidebar (needs devup ≥ 0.14.0) | 0.8.0 |
+| Proxy shown in the tree — provider, domain, TLS — with each service's route | 0.8.0 |
+| Copy service URL, proxy route included | 0.8.0 |
+| Open a service's log file, and reveal the logs folder | 0.8.0 |
+| Forwarded ports marked in the tree, with a prompt to close them when the daemon goes | 0.8.0 |
 | Resolves local `node_modules` devup before global install | 0.2.1 |
 
 ## How it works
@@ -54,6 +58,7 @@ All data (service status, health, phase, profiles) comes exclusively from the da
 | `devup.executablePath` | `""` | Path to the `devup` binary. Empty = use `npx devup` (local `node_modules` first, then global). |
 | `devup.treeView.groupBy` | `"type"` | How to group services: `"type"` (APIs / Webs), `"phase"` (phase 0, phase 1, …), or `"none"` (flat list). |
 | `devup.profile` | `""` | Active profile filter. When set, only services in that profile are shown. Empty = all services. |
+| `devup.logDir` | `""` | Root of devup's log directory, when the daemon runs with `--log-dir`. Empty = `~/.devup/logs`. The daemon does not publish this, so it has to be repeated here for "Open log file" to find anything. |
 
 ## Requirements
 

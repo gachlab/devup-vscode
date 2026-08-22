@@ -1,6 +1,6 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { buildServiceUrl, formatCpu, formatMem, formatSystemStats, formatSystemTooltip, systemStatsKey } from '../../src/url-builder.js';
+import { buildServiceUrl, describeProxy, formatCpu, formatMem, formatSystemStats, formatSystemTooltip, proxyRouteFor, systemStatsKey } from '../../src/url-builder.js';
 import type { ProxyInfo, SystemStats } from '../../src/types.js';
 
 const proxy: ProxyInfo = {
@@ -158,5 +158,42 @@ describe('systemStatsKey', () => {
 
   it('is unchanged by the load average, which nothing displays', () => {
     assert.equal(systemStatsKey({ ...sys, loadAvg1: 1.2 }), systemStatsKey({ ...sys, loadAvg1: 4.75 }));
+  });
+});
+
+describe('proxyRouteFor', () => {
+  it('gives the subdomain for a named route', () => {
+    assert.equal(proxyRouteFor('admin-web', proxy), 'admin.localhost');
+  });
+
+  it('gives the domain root for an empty route', () => {
+    assert.equal(proxyRouteFor('app-web', proxy), 'localhost');
+  });
+
+  it('distinguishes having no route from having one', () => {
+    // Which the sidebar used to render identically.
+    assert.equal(proxyRouteFor('configurations-api', proxy), null);
+  });
+
+  it('is null when no proxy is running', () => {
+    assert.equal(proxyRouteFor('app-web', null), null);
+    assert.equal(proxyRouteFor('app-web', { ...proxy, active: false }), null);
+  });
+});
+
+describe('describeProxy', () => {
+  it('names the provider, the domain and whether TLS is on', () => {
+    assert.equal(describeProxy({ ...proxy, provider: 'traefik', domain: 'guesthub.test', tls: true }),
+      'traefik · guesthub.test · TLS');
+    assert.equal(describeProxy({ ...proxy, provider: 'traefik', domain: 'guesthub.test', tls: false }),
+      'traefik · guesthub.test · no TLS');
+  });
+
+  it('says when the proxy is configured but not active', () => {
+    assert.match(describeProxy({ ...proxy, active: false })!, /inactive/);
+  });
+
+  it('is null when there is no proxy at all', () => {
+    assert.equal(describeProxy(null), null);
   });
 });

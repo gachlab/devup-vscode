@@ -1,6 +1,6 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { selectForwardPorts, parseForwardMode, isPortIgnored, canonicalPort } from '../../src/forward-logic.js';
+import { selectForwardPorts, parseForwardMode, isPortIgnored, canonicalPort, reactToState } from '../../src/forward-logic.js';
 import type { ServiceSnapshot } from '../../src/types.js';
 
 function svc(name: string, port: number, type: string, originalPort?: number): ServiceSnapshot {
@@ -152,5 +152,52 @@ describe('selectForwardPorts with lazy services', () => {
   it('drops a service when neither port is usable', () => {
     const bad = [svc('broken', 70000, 'api', 70001), svc('ok', 3001, 'api', 3001)];
     assert.deepEqual(selectForwardPorts(bad, 'all'), [3001]);
+  });
+});
+
+describe('reactToState', () => {
+  const base = {
+    previous: 'connected', next: 'unreachable',
+    paused: false, restartExpected: false, remote: true, hasRequested: true,
+  };
+
+  it('warns when a remote daemon goes away with tunnels open', () => {
+    assert.equal(reactToState(base), 'warn');
+  });
+
+  it('says nothing in a local window, where there are no tunnels', () => {
+    assert.equal(reactToState({ ...base, remote: false }), 'none');
+  });
+
+  it('says nothing when nothing was ever forwarded', () => {
+    assert.equal(reactToState({ ...base, hasRequested: false }), 'none');
+  });
+
+  it('says nothing about a restart the user asked for', () => {
+    assert.equal(reactToState({ ...base, restartExpected: true }), 'none');
+  });
+
+  it('says nothing while retargeting, which passes through connecting', () => {
+    // A project rename reconnects the store: connected → connecting. Warning
+    // there is warning someone about something they just did.
+    assert.equal(reactToState({ ...base, next: 'connecting' }), 'none');
+  });
+
+  it('does not warn twice for one outage', () => {
+    assert.equal(reactToState({ ...base, previous: 'unreachable' }), 'none');
+    assert.equal(reactToState({ ...base, previous: 'connecting' }), 'none');
+    assert.equal(reactToState({ ...base, previous: null }), 'none');
+  });
+
+  it('resumes on the transition into connected, not on being connected', () => {
+    // The store fires every few seconds while connected. Treating that as a
+    // resume signal un-paused forwarding about three seconds after the user
+    // asked for it, re-opening every port they had just closed.
+    assert.equal(reactToState({ ...base, paused: true, previous: 'unreachable', next: 'connected' }), 'resume');
+    assert.equal(reactToState({ ...base, paused: true, previous: 'connected', next: 'connected' }), 'none');
+  });
+
+  it('has nothing to resume when forwarding was not paused', () => {
+    assert.equal(reactToState({ ...base, paused: false, previous: 'unreachable', next: 'connected' }), 'none');
   });
 });

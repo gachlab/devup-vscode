@@ -25,6 +25,10 @@ suite('Extension Integration', () => {
       'devup.openTerminal',
       'devup.diagnostics',
       'devup.setProjectName',
+      'devup.copyUrl',
+      'devup.openLogFile',
+      'devup.revealLogs',
+      'devup.closeForwardedPorts',
     ];
     for (const cmd of expected) {
       assert.ok(devupCmds.includes(cmd), `command ${cmd} should be registered`);
