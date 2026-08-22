@@ -63,14 +63,33 @@ export function formatSystemTooltip(sys: SystemStats | null): string {
   }
   const cores = isFiniteNumber(sys.cpuCores) ? `${sys.cpuCores} cores` : '';
   if (isFiniteNumber(sys.cpuPercent)) {
-    // One decimal, though the daemon sends two — see `formatHostCpu` for why
-    // the displayed precision is deliberately coarse here.
-    const load = isFiniteNumber(sys.loadAvg1) ? `, load ${sys.loadAvg1.toFixed(1)}` : '';
-    lines.push(`CPU: ${formatHostCpu(sys.cpuPercent)}${cores ? ` of ${cores}${load}` : ''}`);
+    // `loadAvg1` is deliberately not shown. It is the same measurement as
+    // cpuPercent, at a resolution that moves between polls on any busy
+    // machine — and since this text is part of the redraw key, printing it
+    // would put the noise straight back that `formatHostCpu` took out.
+    lines.push(`CPU: ${formatHostCpu(sys.cpuPercent)}${cores ? ` of ${cores}` : ''}`);
   } else if (cores) {
     lines.push(cores);
   }
   return lines.join('\n');
+}
+
+/** What the tree would show for one service's stats.
+ *
+ *  Compared, like the system key, at display precision rather than field by
+ *  field: the daemon reports RSS to a tenth of a megabyte and a live Node dev
+ *  server drifts by more than that between two polls 3 s apart, so an exact
+ *  comparison reports a change on essentially every tick and redraws `184 MB`
+ *  as `184 MB` forever — issue #40 again, for the common case.
+ *
+ *  The cost is bounded and known: the tree's warning icons test the raw value
+ *  against a threshold, so a service crossing 500 MB from 499.6 to 500.2 —
+ *  both printed `500 MB` — keeps its old icon until the next poll where the
+ *  printed figure moves, which on anything drifting enough to matter is the
+ *  very next one. CPU needs no such allowance: the daemon already rounds it to
+ *  the tenth that `formatCpu` prints. */
+export function serviceStatsKey(stats: { cpu: number; memMB: number }): string {
+  return `${formatCpu(stats.cpu)}\u0000${formatMem(stats.memMB)}`;
 }
 
 /** What the UI would show for these system stats, as one string.

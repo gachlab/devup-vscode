@@ -110,11 +110,13 @@ describe('formatSystemStats', () => {
 
 describe('formatSystemTooltip', () => {
   it('spells out CPU against the core count and load', () => {
-    assert.equal(formatSystemTooltip(sys), 'RAM: 11.7 GB used of 30.3 GB\nCPU: 15% of 8 cores, load 1.2');
+    assert.equal(formatSystemTooltip(sys), 'RAM: 11.7 GB used of 30.3 GB\nCPU: 15% of 8 cores');
   });
 
-  it('rounds the load average to what the poll can meaningfully report', () => {
-    assert.match(formatSystemTooltip({ ...sys, loadAvg1: 1.24 }), /load 1\.2$/);
+  it('leaves the raw load average out — it is the same measurement, finer', () => {
+    // The tooltip is part of the redraw key, and loadAvg1 moves between polls
+    // on any busy machine. Printing it would undo the whole-percent rounding.
+    assert.doesNotMatch(formatSystemTooltip(sys), /load/);
   });
 
   it('falls back to the core count when there is no CPU figure', () => {
@@ -154,7 +156,7 @@ describe('systemStatsKey', () => {
     assert.notEqual(systemStatsKey(sys), systemStatsKey({ ...sys, cpuCores: 16 }));
   });
 
-  it('is unchanged by a second decimal of load average', () => {
-    assert.equal(systemStatsKey({ ...sys, loadAvg1: 1.2 }), systemStatsKey({ ...sys, loadAvg1: 1.24 }));
+  it('is unchanged by the load average, which nothing displays', () => {
+    assert.equal(systemStatsKey({ ...sys, loadAvg1: 1.2 }), systemStatsKey({ ...sys, loadAvg1: 4.75 }));
   });
 });

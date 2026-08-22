@@ -137,11 +137,30 @@ describe('StatsCache and the every-3-seconds problem', () => {
     assert.equal(cache.update(result({ api: { cpu: 0, memMB: 100 } }, { ...system, freeMemMB: 18000 })), true);
   });
 
-  it('does not extend that leniency to per-service figures', () => {
-    // These drive the tree's warning icons against a raw threshold, so a tenth
-    // of a megabyte is a real change even where the label would not move.
+  it('stays quiet through a service RSS drifting under the displayed megabyte', () => {
+    // Same argument per service: the daemon reports RSS to a tenth of a
+    // megabyte, a live Node dev server never holds still to that precision,
+    // and the tree prints whole megabytes.
+    const cache = new StatsCache();
+    cache.update(result({ api: { cpu: 1.2, memMB: 184.2 } }));
+    assert.equal(cache.update(result({ api: { cpu: 1.2, memMB: 184.4 } })), false);
+  });
+
+  it('speaks up when a service figure the tree prints does move', () => {
+    const cache = new StatsCache();
+    cache.update(result({ api: { cpu: 1.2, memMB: 184.4 } }));
+    assert.equal(cache.update(result({ api: { cpu: 1.2, memMB: 185.1 } })), true);
+    assert.equal(cache.update(result({ api: { cpu: 1.3, memMB: 185.1 } })), true);
+  });
+
+  it('accepts one poll of lag on a threshold crossing hidden inside a megabyte', () => {
+    // The known cost of comparing at display precision: 499.6 and 500.2 both
+    // print `500 MB`, so the tree's warning icon waits for the next poll where
+    // the printed figure moves. Documented here so it is a decision, not a
+    // surprise.
     const cache = new StatsCache();
     cache.update(result({ api: { cpu: 0, memMB: 499.6 } }));
-    assert.equal(cache.update(result({ api: { cpu: 0, memMB: 500.2 } })), true);
+    assert.equal(cache.update(result({ api: { cpu: 0, memMB: 500.2 } })), false);
+    assert.equal(cache.update(result({ api: { cpu: 0, memMB: 501.0 } })), true);
   });
 });

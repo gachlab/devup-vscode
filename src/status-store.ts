@@ -25,6 +25,10 @@ export class StatusStore implements vscode.Disposable {
    *  concurrent connect would open a second `status.follow` and drop the first
    *  subscription on the floor without closing it. */
   private connecting = false;
+  /** A refresh that arrived while a connect was in flight. Dropping it would
+   *  make the button do nothing at all for the ~2 s of the probe — the one
+   *  moment someone is most likely to press it twice. */
+  private refreshPending = false;
   private readonly emitter = new vscode.EventEmitter<void>();
   readonly onDidChange = this.emitter.event;
   private disposed = false;
@@ -49,6 +53,10 @@ export class StatusStore implements vscode.Disposable {
       await this.doConnect();
     } finally {
       this.connecting = false;
+    }
+    if (this.refreshPending && !this.disposed) {
+      this.refreshPending = false;
+      this.refresh();
     }
   }
 
@@ -107,6 +115,7 @@ export class StatusStore implements vscode.Disposable {
    *  refresh means waiting out up to 30 s of a backoff you cannot see. */
   refresh(): void {
     if (this.disposed) return;
+    if (this.connecting) { this.refreshPending = true; return; }
     if (this.state === 'connected') {
       // Nothing to reconnect. Re-poll the stats, which the stream does not
       // carry, and redraw.
@@ -123,6 +132,10 @@ export class StatusStore implements vscode.Disposable {
     if (this.state !== 'connected') return;
     try {
       const result = await sendRpc(this.socketPath, 'stats', {}, { timeoutMs: 3000 }) as StatsResult;
+      // The stream can drop while this RPC is in flight, in which case the
+      // disconnect has already cleared the cache — repopulating it now would
+      // leave the status bar showing host memory for a daemon that is gone.
+      if (this.disposed || this.state !== 'connected') return;
       // Only when a number actually moved: this poll runs every 3 s forever,
       // and every subscriber recomputes on each event (issue #40).
       if (this.stats.update(result)) this.emitter.fire();
