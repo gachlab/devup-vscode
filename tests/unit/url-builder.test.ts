@@ -78,13 +78,13 @@ const sys: SystemStats = { totalMemMB: 31000, freeMemMB: 19000, cpuCores: 8, loa
 describe('formatSystemStats', () => {
   it('shows the reported CPU, not the memory share', () => {
     const out = formatSystemStats(sys);
-    assert.match(out, /\$\(pulse\) 15\.0%/);
+    assert.match(out, /\$\(pulse\) 15%/);
     // 12000/31000 = 38.7% — what the old code put behind the pulse icon.
-    assert.doesNotMatch(out, /38\.7%/);
+    assert.doesNotMatch(out, /39%/);
   });
 
   it('shows memory in absolute terms only', () => {
-    assert.equal(formatSystemStats(sys), '$(pulse) 15.0% · $(database) 11.7 GB/30.3 GB');
+    assert.equal(formatSystemStats(sys), '$(pulse) 15% · $(database) 11.7 GB/30.3 GB');
   });
 
   it('omits CPU when the daemon does not report it', () => {
@@ -96,7 +96,7 @@ describe('formatSystemStats', () => {
   });
 
   it('keeps a zero CPU reading, which is a real number', () => {
-    assert.match(formatSystemStats({ ...sys, cpuPercent: 0 }), /\$\(pulse\) 0\.0%/);
+    assert.match(formatSystemStats({ ...sys, cpuPercent: 0 }), /\$\(pulse\) 0%/);
   });
 
   it('is empty without stats', () => {
@@ -104,13 +104,13 @@ describe('formatSystemStats', () => {
   });
 
   it('drops the memory segment rather than printing NaN', () => {
-    assert.equal(formatSystemStats({ totalMemMB: 0, freeMemMB: 0, cpuCores: 8, cpuPercent: 15 }), '$(pulse) 15.0%');
+    assert.equal(formatSystemStats({ totalMemMB: 0, freeMemMB: 0, cpuCores: 8, cpuPercent: 15 }), '$(pulse) 15%');
   });
 });
 
 describe('formatSystemTooltip', () => {
   it('spells out CPU against the core count and load', () => {
-    assert.equal(formatSystemTooltip(sys), 'RAM: 11.7 GB used of 30.3 GB\nCPU: 15.0% of 8 cores, load 1.2');
+    assert.equal(formatSystemTooltip(sys), 'RAM: 11.7 GB used of 30.3 GB\nCPU: 15% of 8 cores, load 1.2');
   });
 
   it('rounds the load average to what the poll can meaningfully report', () => {
@@ -140,7 +140,14 @@ describe('systemStatsKey', () => {
   });
 
   it('changes when the rendered CPU does', () => {
-    assert.notEqual(systemStatsKey(sys), systemStatsKey({ ...sys, cpuPercent: 15.1 }));
+    assert.notEqual(systemStatsKey(sys), systemStatsKey({ ...sys, cpuPercent: 16 }));
+  });
+
+  it('is unchanged by a CPU reading that moves under a whole percent', () => {
+    // cpuPercent is derived from the load average, so on an 8-core box a 0.01
+    // change in load moves it by 0.125 pp. Tracking that would fire the redraw
+    // on every kernel loadavg update — which is issue #40 all over again.
+    assert.equal(systemStatsKey({ ...sys, cpuPercent: 15.1 }), systemStatsKey({ ...sys, cpuPercent: 15.4 }));
   });
 
   it('changes when the core count does, which only the tooltip shows', () => {

@@ -99,8 +99,9 @@ export function registerServiceCommands(
 
     vscode.commands.registerCommand('devup.refresh', () => {
       // Reconnecting is autonomous, but it backs off to 30 s while the daemon
-      // stays down — so a user who has just started one should not have to
-      // wait out a delay they cannot see. This retries immediately.
+      // stays down — so someone who has just started one should not have to
+      // wait out a delay they cannot see. This retries immediately. Reachable
+      // from the refresh button in the view title and the Command Palette.
       store.refresh();
     }),
   );

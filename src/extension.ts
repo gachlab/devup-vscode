@@ -108,7 +108,7 @@ export function activate(context: vscode.ExtensionContext): void {
   context.subscriptions.push(profilePicker);
 
   // Daemon-level commands (start / stop / restart).
-  registerDaemonCommands(context, folder.uri.fsPath);
+  registerDaemonCommands(context, folder.uri.fsPath, store);
 
   // Show-status notification command (legacy entry point).
   context.subscriptions.push(
@@ -120,9 +120,7 @@ export function activate(context: vscode.ExtensionContext): void {
           'Start it (devup up -d)',
         );
         if (choice === 'Start it (devup up -d)') {
-          const term = vscode.window.createTerminal({ name: 'devup' });
-          term.show();
-          term.sendText('devup up -d');
+          void vscode.commands.executeCommand('devup.daemon.start');
         }
         return;
       }

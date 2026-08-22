@@ -1,4 +1,5 @@
 import * as vscode from 'vscode';
+import type { StatusStore } from './status-store.js';
 
 /** Daemon-level commands: start / stop / restart. All shell out to the
  *  `devup` CLI in the integrated terminal — keeps the behaviour transparent
@@ -21,12 +22,34 @@ function getDevupCommand(): string {
   return 'npx devup';
 }
 
-export function registerDaemonCommands(context: vscode.ExtensionContext, workspaceCwd: string): void {
+/** When the daemon has just been asked to start, retry sooner than the
+ *  reconnect backoff would on its own.
+ *
+ *  Without this, starting the daemon from the button next to the welcome view
+ *  and then watching the sidebar keep saying "not running" for up to 30 s is
+ *  the normal experience — the backoff has usually climbed to its ceiling by
+ *  the time anyone gets around to pressing it. Each nudge resets the backoff,
+ *  so the attempts land while a stack is still booting rather than after it. */
+const NUDGE_DELAYS_MS = [2_000, 6_000, 12_000];
+
+function nudgeReconnect(store: StatusStore, context: vscode.ExtensionContext): void {
+  for (const delay of NUDGE_DELAYS_MS) {
+    const timer = setTimeout(() => store.refresh(), delay);
+    context.subscriptions.push({ dispose: () => clearTimeout(timer) });
+  }
+}
+
+export function registerDaemonCommands(
+  context: vscode.ExtensionContext,
+  workspaceCwd: string,
+  store: StatusStore,
+): void {
   context.subscriptions.push(
     vscode.commands.registerCommand('devup.daemon.start', () => {
       const term = getOrCreateTerminal(workspaceCwd);
       term.show();
       term.sendText(`${getDevupCommand()} up -d`);
+      nudgeReconnect(store, context);
     }),
 
     vscode.commands.registerCommand('devup.daemon.stop', () => {
@@ -43,6 +66,7 @@ export function registerDaemonCommands(context: vscode.ExtensionContext, workspa
       // to bring one up afterwards. Hence `;` rather than `&&`.
       const devup = getDevupCommand();
       term.sendText(`${devup} down ; ${devup} up -d`);
+      nudgeReconnect(store, context);
     }),
   );
 }

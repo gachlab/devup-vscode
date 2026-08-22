@@ -20,6 +20,21 @@ export function formatMem(memMB: number): string {
   return memMB >= 1024 ? `${(memMB / 1024).toFixed(1)} GB` : `${memMB.toFixed(0)} MB`;
 }
 
+/** Host CPU load, in whole percent — coarser than the per-service `formatCpu`,
+ *  on purpose.
+ *
+ *  The daemon derives this from the 1-minute load average
+ *  (`round(load / cores * 1000) / 10`), so on an 8-core machine a 0.01 change
+ *  in load moves it by 0.125 pp — enough to change a tenth-of-a-percent
+ *  reading on essentially every kernel loadavg update. Since what the status
+ *  bar renders is also what decides whether to redraw (`systemStatsKey`),
+ *  showing that last digit would keep the whole UI recomputing every few
+ *  seconds to display a number nobody can act on. The tooltip's load average
+ *  carries the finer detail for anyone who wants it. */
+export function formatHostCpu(cpuPercent: number): string {
+  return `${Math.round(cpuPercent)}%`;
+}
+
 /** Host figures for the status bar: CPU only when the daemon actually reports
  *  one, memory in absolute terms.
  *
@@ -32,7 +47,7 @@ export function formatMem(memMB: number): string {
 export function formatSystemStats(sys: SystemStats | null): string {
   if (!sys) return '';
   const parts: string[] = [];
-  if (isFiniteNumber(sys.cpuPercent)) parts.push(`$(pulse) ${formatCpu(sys.cpuPercent)}`);
+  if (isFiniteNumber(sys.cpuPercent)) parts.push(`$(pulse) ${formatHostCpu(sys.cpuPercent)}`);
   if (hasMemory(sys)) {
     parts.push(`$(database) ${formatMem(sys.totalMemMB - sys.freeMemMB)}/${formatMem(sys.totalMemMB)}`);
   }
@@ -48,12 +63,10 @@ export function formatSystemTooltip(sys: SystemStats | null): string {
   }
   const cores = isFiniteNumber(sys.cpuCores) ? `${sys.cpuCores} cores` : '';
   if (isFiniteNumber(sys.cpuPercent)) {
-    // One decimal, though the daemon sends two: the tooltip is part of the
-    // comparison that decides whether to redraw (see `systemStatsKey`), and a
-    // second decimal of load average moves on nearly every poll without
-    // telling anyone anything.
+    // One decimal, though the daemon sends two — see `formatHostCpu` for why
+    // the displayed precision is deliberately coarse here.
     const load = isFiniteNumber(sys.loadAvg1) ? `, load ${sys.loadAvg1.toFixed(1)}` : '';
-    lines.push(`CPU: ${formatCpu(sys.cpuPercent)}${cores ? ` of ${cores}${load}` : ''}`);
+    lines.push(`CPU: ${formatHostCpu(sys.cpuPercent)}${cores ? ` of ${cores}${load}` : ''}`);
   } else if (cores) {
     lines.push(cores);
   }

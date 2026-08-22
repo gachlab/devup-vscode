@@ -44,7 +44,10 @@ that does nothing at all: the daemon recomputes `freeMemMB` from `os.freemem()`
 on each poll, and on a live machine those whole megabytes differ *every time*,
 while the `11.7 GB` rendered from them does not. System stats are therefore
 compared by what the status bar would render (`systemStatsKey`), and anything
-new that displays them belongs in that key. Per-service figures are compared
+new that displays them belongs in that key — which also means the *displayed*
+precision decides the redraw rate: host CPU is printed in whole percent
+because it comes from the load average, where a tenth of a percent moves on
+every kernel update. Per-service figures are compared
 exactly on purpose: the tree's warning icons test the raw value against a
 threshold.
 

@@ -20,6 +20,11 @@ export class StatusStore implements vscode.Disposable {
   private reconnectTimer: NodeJS.Timeout | null = null;
   private statsTimer: NodeJS.Timeout | null = null;
   private state: ConnectionState = 'connecting';
+  /** True while `connect()` is between its first await and opening the stream.
+   *  `refresh()` can be pressed at any moment, including then, and a second
+   *  concurrent connect would open a second `status.follow` and drop the first
+   *  subscription on the floor without closing it. */
+  private connecting = false;
   private readonly emitter = new vscode.EventEmitter<void>();
   readonly onDidChange = this.emitter.event;
   private disposed = false;
@@ -38,7 +43,16 @@ export class StatusStore implements vscode.Disposable {
   getSystemStats(): SystemStats | null { return this.stats.getSystem(); }
 
   private async connect(): Promise<void> {
-    if (this.disposed) return;
+    if (this.disposed || this.connecting) return;
+    this.connecting = true;
+    try {
+      await this.doConnect();
+    } finally {
+      this.connecting = false;
+    }
+  }
+
+  private async doConnect(): Promise<void> {
     this.state = 'connecting';
     this.emitter.fire();
 
@@ -86,10 +100,11 @@ export class StatusStore implements vscode.Disposable {
     );
   }
 
-  /** What the tree's refresh button does. Without this the button was a no-op
-   *  justified by "reconnect happens in <= 3 s anyway", which stopped being
-   *  true the moment the delay started doubling: a user who starts the daemon
-   *  and clicks refresh would otherwise wait out up to 30 s of backoff. */
+  /** What `devup: Refresh services` does — the view-title button and the
+   *  Command Palette entry. It used to be a no-op justified by "reconnect
+   *  happens in <= 3 s anyway", which stopped being true the moment the delay
+   *  started doubling: without this, starting the daemon and asking for a
+   *  refresh means waiting out up to 30 s of a backoff you cannot see. */
   refresh(): void {
     if (this.disposed) return;
     if (this.state === 'connected') {
