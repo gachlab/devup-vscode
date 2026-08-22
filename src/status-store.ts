@@ -54,9 +54,6 @@ export class StatusStore implements vscode.Disposable {
       this.proxy = snapshot.proxy ?? null;
       if (infoResult) this.info = infoResult;
       this.state = 'connected';
-      // A daemon that comes back after an hour down should be picked up in
-      // 3 s, not at whatever delay the backoff had climbed to.
-      this.backoff.reset();
       this.emitter.fire();
       this.startStatsPolling();
     } catch {
@@ -70,6 +67,12 @@ export class StatusStore implements vscode.Disposable {
     this.subscription = openStream(
       this.socketPath, 'status.follow', {},
       (frame: StreamFrame) => {
+        // Reset here rather than after the `status` probe: one-shot RPCs can
+        // succeed against a daemon whose `status.follow` then fails or drops
+        // immediately, and resetting on the probe turns that into a flat 3 s
+        // connect/fail loop — the retry storm the backoff exists to stop. A
+        // delivered frame is proof the subscription works.
+        this.backoff.reset();
         if (frame.event !== 'status' || !Array.isArray(frame.data)) return;
         const prevNames = new Set(this.services.keys());
         for (const s of frame.data as ServiceSnapshot[]) {
@@ -83,19 +86,38 @@ export class StatusStore implements vscode.Disposable {
     );
   }
 
+  /** What the tree's refresh button does. Without this the button was a no-op
+   *  justified by "reconnect happens in <= 3 s anyway", which stopped being
+   *  true the moment the delay started doubling: a user who starts the daemon
+   *  and clicks refresh would otherwise wait out up to 30 s of backoff. */
+  refresh(): void {
+    if (this.disposed) return;
+    if (this.state === 'connected') {
+      // Nothing to reconnect. Re-poll the stats, which the stream does not
+      // carry, and redraw.
+      void this.pollStats();
+      this.emitter.fire();
+      return;
+    }
+    if (this.reconnectTimer) { clearTimeout(this.reconnectTimer); this.reconnectTimer = null; }
+    this.backoff.reset();
+    void this.connect();
+  }
+
+  private async pollStats(): Promise<void> {
+    if (this.state !== 'connected') return;
+    try {
+      const result = await sendRpc(this.socketPath, 'stats', {}, { timeoutMs: 3000 }) as StatsResult;
+      // Only when a number actually moved: this poll runs every 3 s forever,
+      // and every subscriber recomputes on each event (issue #40).
+      if (this.stats.update(result)) this.emitter.fire();
+    } catch { /* core < 0.10.0 or transient — degrade gracefully */ }
+  }
+
   private startStatsPolling(): void {
     this.stopStatsPolling();
-    const poll = async () => {
-      if (this.state !== 'connected') return;
-      try {
-        const result = await sendRpc(this.socketPath, 'stats', {}, { timeoutMs: 3000 }) as StatsResult;
-        // Only when a number actually moved: this poll runs every 3 s forever,
-        // and every subscriber recomputes on each event (issue #40).
-        if (this.stats.update(result)) this.emitter.fire();
-      } catch { /* core < 0.10.0 or transient — degrade gracefully */ }
-    };
-    void poll();
-    this.statsTimer = setInterval(() => void poll(), 3000);
+    void this.pollStats();
+    this.statsTimer = setInterval(() => void this.pollStats(), 3000);
   }
 
   private stopStatsPolling(): void {

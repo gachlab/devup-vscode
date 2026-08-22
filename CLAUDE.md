@@ -35,11 +35,22 @@ source of truth — read it, not the docs, which have been wrong.
   API to close or observe a tunnel, so the editor's Ports view is the only
   source of truth for what is open.
 
-## 4. The store fires every few seconds regardless
+## 4. Comparing the daemon's stats field by field is not a comparison
 
-`StatusStore` emits on every `stats` poll whether anything changed or not.
-Anything subscribing to `onDidChange` must compare against its own previous
-value, or it will do its work every 3 seconds forever. See issue #40.
+`StatusStore` used to emit on every `stats` poll whether anything had changed
+or not, so every subscriber recomputed every 3 seconds forever (issue #40).
+It now emits only when something moved — but the obvious implementation of
+that does nothing at all: the daemon recomputes `freeMemMB` from `os.freemem()`
+on each poll, and on a live machine those whole megabytes differ *every time*,
+while the `11.7 GB` rendered from them does not. System stats are therefore
+compared by what the status bar would render (`systemStatsKey`), and anything
+new that displays them belongs in that key. Per-service figures are compared
+exactly on purpose: the tree's warning icons test the raw value against a
+threshold.
+
+Subscribers that do real work per event — `PortForwarder` re-asserting 25
+tunnels — should still keep their own fingerprint. The store is quiet, not
+silent.
 
 ## 5. Discovery runs once, at activation
 

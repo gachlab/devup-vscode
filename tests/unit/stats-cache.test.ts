@@ -115,3 +115,33 @@ describe('StatsCache.clear', () => {
     assert.equal(cache.clear(), true);
   });
 });
+
+describe('StatsCache and the every-3-seconds problem', () => {
+  // The reason issue #40 is easy to "fix" without fixing anything: the daemon
+  // recomputes freeMemMB from os.freemem() on every poll, so a field-by-field
+  // comparison reports a change every 3 s on any machine that is doing
+  // anything at all — including running the editor asking the question.
+  const drifting = [19000, 18997, 19002, 18999, 19001];
+
+  it('stays quiet through host memory drifting under the displayed precision', () => {
+    const cache = new StatsCache();
+    cache.update(result({ api: { cpu: 0, memMB: 100 } }, { ...system, freeMemMB: drifting[0] }));
+    for (const freeMemMB of drifting.slice(1)) {
+      assert.equal(cache.update(result({ api: { cpu: 0, memMB: 100 } }, { ...system, freeMemMB })), false);
+    }
+  });
+
+  it('still speaks up once the drift reaches the screen', () => {
+    const cache = new StatsCache();
+    cache.update(result({ api: { cpu: 0, memMB: 100 } }, { ...system, freeMemMB: 19000 }));
+    assert.equal(cache.update(result({ api: { cpu: 0, memMB: 100 } }, { ...system, freeMemMB: 18000 })), true);
+  });
+
+  it('does not extend that leniency to per-service figures', () => {
+    // These drive the tree's warning icons against a raw threshold, so a tenth
+    // of a megabyte is a real change even where the label would not move.
+    const cache = new StatsCache();
+    cache.update(result({ api: { cpu: 0, memMB: 499.6 } }));
+    assert.equal(cache.update(result({ api: { cpu: 0, memMB: 500.2 } })), true);
+  });
+});

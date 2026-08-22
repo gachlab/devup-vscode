@@ -1,6 +1,6 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { buildServiceUrl, formatCpu, formatMem, formatSystemStats, formatSystemTooltip } from '../../src/url-builder.js';
+import { buildServiceUrl, formatCpu, formatMem, formatSystemStats, formatSystemTooltip, systemStatsKey } from '../../src/url-builder.js';
 import type { ProxyInfo, SystemStats } from '../../src/types.js';
 
 const proxy: ProxyInfo = {
@@ -113,6 +113,10 @@ describe('formatSystemTooltip', () => {
     assert.equal(formatSystemTooltip(sys), 'RAM: 11.7 GB used of 30.3 GB\nCPU: 15.0% of 8 cores, load 1.2');
   });
 
+  it('rounds the load average to what the poll can meaningfully report', () => {
+    assert.match(formatSystemTooltip({ ...sys, loadAvg1: 1.24 }), /load 1\.2$/);
+  });
+
   it('falls back to the core count when there is no CPU figure', () => {
     const { cpuPercent, loadAvg1, ...rest } = sys;
     assert.equal(formatSystemTooltip(rest as SystemStats), 'RAM: 11.7 GB used of 30.3 GB\n8 cores');
@@ -120,5 +124,30 @@ describe('formatSystemTooltip', () => {
 
   it('is empty without stats', () => {
     assert.equal(formatSystemTooltip(null), '');
+  });
+});
+
+describe('systemStatsKey', () => {
+  it('is unchanged by host free memory drifting below display precision', () => {
+    // The daemon recomputes freeMemMB from os.freemem() on every 3 s poll and
+    // it moves every time on a live machine — but 12000 MB and 12003 MB in use
+    // both render as 11.7 GB, so there is nothing to redraw.
+    assert.equal(systemStatsKey(sys), systemStatsKey({ ...sys, freeMemMB: 18997 }));
+  });
+
+  it('changes when the rendered memory does', () => {
+    assert.notEqual(systemStatsKey(sys), systemStatsKey({ ...sys, freeMemMB: 18000 }));
+  });
+
+  it('changes when the rendered CPU does', () => {
+    assert.notEqual(systemStatsKey(sys), systemStatsKey({ ...sys, cpuPercent: 15.1 }));
+  });
+
+  it('changes when the core count does, which only the tooltip shows', () => {
+    assert.notEqual(systemStatsKey(sys), systemStatsKey({ ...sys, cpuCores: 16 }));
+  });
+
+  it('is unchanged by a second decimal of load average', () => {
+    assert.equal(systemStatsKey({ ...sys, loadAvg1: 1.2 }), systemStatsKey({ ...sys, loadAvg1: 1.24 }));
   });
 });

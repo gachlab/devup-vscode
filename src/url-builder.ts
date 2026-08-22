@@ -48,12 +48,33 @@ export function formatSystemTooltip(sys: SystemStats | null): string {
   }
   const cores = isFiniteNumber(sys.cpuCores) ? `${sys.cpuCores} cores` : '';
   if (isFiniteNumber(sys.cpuPercent)) {
-    const load = isFiniteNumber(sys.loadAvg1) ? `, load ${sys.loadAvg1}` : '';
+    // One decimal, though the daemon sends two: the tooltip is part of the
+    // comparison that decides whether to redraw (see `systemStatsKey`), and a
+    // second decimal of load average moves on nearly every poll without
+    // telling anyone anything.
+    const load = isFiniteNumber(sys.loadAvg1) ? `, load ${sys.loadAvg1.toFixed(1)}` : '';
     lines.push(`CPU: ${formatCpu(sys.cpuPercent)}${cores ? ` of ${cores}${load}` : ''}`);
   } else if (cores) {
     lines.push(cores);
   }
   return lines.join('\n');
+}
+
+/** What the UI would show for these system stats, as one string.
+ *
+ *  Two snapshots with the same key are indistinguishable on screen, so there
+ *  is nothing to redraw. This is the comparison `StatsCache` uses for system
+ *  stats, because comparing the raw fields does not work: the daemon recomputes
+ *  `freeMemMB` from `os.freemem()` on every 3 s poll, and on a live machine
+ *  that whole-megabyte figure moves every single time — while the text built
+ *  from it, quantised to 0.1 GB, does not. Comparing the fields would leave the
+ *  UI recomputing 1,200 times an hour with nothing to show for it, which is the
+ *  whole of issue #40.
+ *
+ *  The status bar is the only consumer of `SystemStats`; if another appears,
+ *  its output belongs in this key too. */
+export function systemStatsKey(sys: SystemStats): string {
+  return `${formatSystemStats(sys)}\u0000${formatSystemTooltip(sys)}`;
 }
 
 function hasMemory(sys: SystemStats): boolean {

@@ -20,8 +20,12 @@ export class Backoff {
     return delay;
   }
 
-  /** Back to the base delay — call on a successful connect, so a daemon that
-   *  restarts after an hour down is picked up in 3 s rather than 30. */
+  /** Back to the base delay. Call once a connection has demonstrably worked,
+   *  so the *next* outage starts from 3 s again rather than from wherever the
+   *  last one climbed to. It does not shorten the outage in progress: by the
+   *  time a daemon returns, the pending delay may already be the ceiling, so
+   *  detection takes up to 30 s — `devup: Refresh services` retries at once
+   *  for anyone unwilling to wait. */
   reset(): void {
     this.attempt = 0;
   }

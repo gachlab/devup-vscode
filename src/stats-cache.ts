@@ -7,6 +7,7 @@
  *  `update()` reports whether anything actually changed, so the store can stay
  *  quiet when nothing did. */
 import type { ServiceStats, SystemStats } from './types.js';
+import { systemStatsKey } from './url-builder.js';
 
 export interface StatsResult {
   services?: Record<string, ServiceStats>;
@@ -53,16 +54,20 @@ function sameServices(a: Map<string, ServiceStats>, b: Map<string, ServiceStats>
   for (const [name, stats] of a) {
     const other = b.get(name);
     if (!other) return false;
+    // Per-service figures are compared exactly, unlike the system ones: the
+    // daemon already rounds them to a tenth, they only move when the service
+    // does something, and the tree's warning icons are driven from the raw
+    // value against a threshold — rounding here could hold an icon back.
     if (stats.cpu !== other.cpu || stats.memMB !== other.memMB) return false;
   }
   return true;
 }
 
+/** Compared by what the status bar would render, not field by field: host free
+ *  memory and the load average move on literally every poll, so a field
+ *  comparison reports a change every 3 s forever while the screen stays
+ *  identical. See `systemStatsKey`. */
 function sameSystem(a: SystemStats | null, b: SystemStats | null): boolean {
   if (a === null || b === null) return a === b;
-  return a.totalMemMB === b.totalMemMB
-    && a.freeMemMB === b.freeMemMB
-    && a.cpuCores === b.cpuCores
-    && a.loadAvg1 === b.loadAvg1
-    && a.cpuPercent === b.cpuPercent;
+  return systemStatsKey(a) === systemStatsKey(b);
 }
