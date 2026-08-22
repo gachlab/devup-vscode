@@ -42,14 +42,22 @@ or not, so every subscriber recomputed every 3 seconds forever (issue #40).
 It now emits only when something moved — but the obvious implementation of
 that does nothing at all: the daemon recomputes `freeMemMB` from `os.freemem()`
 on each poll, and on a live machine those whole megabytes differ *every time*,
-while the `11.7 GB` rendered from them does not. System stats are therefore
-compared by what the status bar would render (`systemStatsKey`), and anything
-new that displays them belongs in that key — which also means the *displayed*
-precision decides the redraw rate: host CPU is printed in whole percent
-because it comes from the load average, where a tenth of a percent moves on
-every kernel update. Per-service figures are compared
-exactly on purpose: the tree's warning icons test the raw value against a
-threshold.
+while the `11.7 GB` rendered from them does not. The same is true per
+service: RSS arrives in tenths of a megabyte and the tree prints whole ones.
+
+Stats are therefore compared by what can actually change on screen —
+`systemStatsKey` for the status bar, `serviceStatsKey` for the tree — and
+anything new that displays them belongs in one of those keys. Which also means
+the *displayed* precision sets the redraw rate, so keep it no finer than the
+number deserves: host CPU prints as a whole percent because it comes from the
+load average, where a tenth of a percent moves on every kernel update, and the
+load average itself is not printed at all for the same reason.
+
+One exception, and the reason `serviceStatsKey` is not simply the rendered
+text: service memory is compared at the whole megabyte even above a gigabyte,
+where the tree prints tenths of a gigabyte. The warning icons test the raw
+value against a threshold, and a 102 MB bucket would let a service sitting at
+1510 MB keep the wrong icon indefinitely against a 1500 MB threshold.
 
 Subscribers that do real work per event — `PortForwarder` re-asserting 25
 tunnels — should still keep their own fingerprint. The store is quiet, not

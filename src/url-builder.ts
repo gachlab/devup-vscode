@@ -74,22 +74,24 @@ export function formatSystemTooltip(sys: SystemStats | null): string {
   return lines.join('\n');
 }
 
-/** What the tree would show for one service's stats.
+/** The precision at which one service's stats can change anything on screen.
  *
- *  Compared, like the system key, at display precision rather than field by
- *  field: the daemon reports RSS to a tenth of a megabyte and a live Node dev
- *  server drifts by more than that between two polls 3 s apart, so an exact
- *  comparison reports a change on essentially every tick and redraws `184 MB`
- *  as `184 MB` forever — issue #40 again, for the common case.
+ *  Compared like the system key at the precision that is shown rather than
+ *  field by field: the daemon reports RSS to a tenth of a megabyte and no live
+ *  Node dev server holds still to that between two polls 3 s apart, so an
+ *  exact comparison reports a change on essentially every tick and redraws
+ *  `184 MB` as `184 MB` forever — issue #40 again, for the common case.
  *
- *  The cost is bounded and known: the tree's warning icons test the raw value
- *  against a threshold, so a service crossing 500 MB from 499.6 to 500.2 —
- *  both printed `500 MB` — keeps its old icon until the next poll where the
- *  printed figure moves, which on anything drifting enough to matter is the
- *  very next one. CPU needs no such allowance: the daemon already rounds it to
- *  the tenth that `formatCpu` prints. */
+ *  Memory is compared at the whole megabyte rather than at what `formatMem`
+ *  prints, which is not the same thing above a gigabyte: there it prints
+ *  tenths of a gigabyte, and a key that coarse would let a service sitting at
+ *  1510 MB keep the wrong warning icon indefinitely against a 1500 MB
+ *  threshold — the icons test the raw value. At the megabyte the blind spot is
+ *  under 1 MB and closes on the next poll that moves the figure. CPU needs no
+ *  such allowance: the daemon already rounds it to the tenth that `formatCpu`
+ *  prints. */
 export function serviceStatsKey(stats: { cpu: number; memMB: number }): string {
-  return `${formatCpu(stats.cpu)}\u0000${formatMem(stats.memMB)}`;
+  return `${formatCpu(stats.cpu)}\u0000${Math.round(stats.memMB)}`;
 }
 
 /** What the UI would show for these system stats, as one string.

@@ -28,10 +28,7 @@ export class StatsCache {
 
   /** Replace the cached stats; true when the new numbers differ from the old. */
   update(result: StatsResult): boolean {
-    const raw = result.services;
-    const services = new Map<string, ServiceStats>(
-      raw && typeof raw === 'object' ? Object.entries(raw) : [],
-    );
+    const services = readServices(result.services);
     const system = result.system ?? null;
     const changed = !sameServices(this.services, services) || !sameSystem(this.system, system);
     this.services = services;
@@ -47,6 +44,28 @@ export class StatsCache {
     this.system = null;
     return had;
   }
+}
+
+/** Keep only entries that are actually a pair of numbers.
+ *
+ *  The protocol is a hand-written copy and nothing validates it (CLAUDE.md
+ *  rule 2), so a malformed entry has to be survivable. It is worse than it
+ *  sounds if it is not: caching one and then comparing against it throws,
+ *  `pollStats` swallows the error, the assignment below never runs — and every
+ *  later poll re-enters the same throw, freezing the tree and status bar on
+ *  stale numbers for the rest of the session with nothing logged. A dropped
+ *  entry just reads as "no stats for this service", which the tree and the
+ *  status bar already render. */
+function readServices(raw: StatsResult['services']): Map<string, ServiceStats> {
+  const out = new Map<string, ServiceStats>();
+  if (!raw || typeof raw !== 'object') return out;
+  for (const [name, stats] of Object.entries(raw)) {
+    if (!stats || typeof stats !== 'object') continue;
+    const { cpu, memMB } = stats as Partial<ServiceStats>;
+    if (!Number.isFinite(cpu) || !Number.isFinite(memMB)) continue;
+    out.set(name, { cpu: cpu as number, memMB: memMB as number });
+  }
+  return out;
 }
 
 function sameServices(a: Map<string, ServiceStats>, b: Map<string, ServiceStats>): boolean {

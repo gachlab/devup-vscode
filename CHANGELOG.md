@@ -13,7 +13,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Reconnecting to a daemon that is not running retried every 3 s forever** (#41), roughly 1,200 socket opens an hour against a path that does not exist. The delay now doubles from 3 s to a 30 s ceiling, and resets once a connection has demonstrably worked — on the first frame of the status stream, not on the one-shot probe, since a daemon whose stream fails immediately would otherwise pin the retry at a flat 3 s. A daemon that comes back while the delay is at the ceiling is therefore noticed within 30 s; **`devup: Refresh services` now retries immediately** instead of doing nothing, and is back as a button in the view title; starting or restarting the daemon from the extension also retries while the stack boots, rather than leaving the sidebar saying "not running" for half a minute after it is up.
 
 ### Internal
-- New vscode-free modules `src/stats-cache.ts` (stats comparison) and `src/backoff.ts`, plus `formatSystemStats` / `formatSystemTooltip` / `systemStatsKey` in `src/url-builder.ts` — 38 new unit tests, each verified by mutation.
+- New vscode-free modules `src/stats-cache.ts` (stats comparison) and `src/backoff.ts`, plus `formatSystemStats` / `formatSystemTooltip` / `systemStatsKey` in `src/url-builder.ts` — 45 new unit tests, each verified by mutation.
 
 ## [0.7.0] — 2026-08-21
 

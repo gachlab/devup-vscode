@@ -71,6 +71,10 @@ export class StatusStore implements vscode.Disposable {
         sendRpc(this.socketPath, 'status', {}, { timeoutMs: 2000 }) as Promise<{ services: ServiceSnapshot[]; proxy: ProxyInfo | null }>,
         sendRpc(this.socketPath, 'info', {}, { timeoutMs: 2000 }).catch(() => null) as Promise<ProjectInfo | null>,
       ]);
+      // dispose() can land during the probe above; without this the poll
+      // interval and the stream below outlive the extension, and nothing is
+      // left holding a reference to clear them.
+      if (this.disposed) return;
       this.services.clear();
       for (const s of snapshot.services ?? []) this.services.set(s.name, s);
       this.proxy = snapshot.proxy ?? null;

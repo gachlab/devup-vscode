@@ -153,6 +153,15 @@ describe('StatsCache and the every-3-seconds problem', () => {
     assert.equal(cache.update(result({ api: { cpu: 1.3, memMB: 185.1 } })), true);
   });
 
+  it('compares memory at the megabyte even above a gigabyte, where the tree prints tenths', () => {
+    // formatMem would render 1490 and 1510 MB alike as `1.5 GB`. A key that
+    // coarse leaves a service sitting at 1510 MB with the wrong warning icon
+    // against a 1500 MB threshold for as long as it sits there.
+    const cache = new StatsCache();
+    cache.update(result({ api: { cpu: 0, memMB: 1490 } }));
+    assert.equal(cache.update(result({ api: { cpu: 0, memMB: 1510 } })), true);
+  });
+
   it('accepts one poll of lag on a threshold crossing hidden inside a megabyte', () => {
     // The known cost of comparing at display precision: 499.6 and 500.2 both
     // print `500 MB`, so the tree's warning icon waits for the next poll where
@@ -162,5 +171,35 @@ describe('StatsCache and the every-3-seconds problem', () => {
     cache.update(result({ api: { cpu: 0, memMB: 499.6 } }));
     assert.equal(cache.update(result({ api: { cpu: 0, memMB: 500.2 } })), false);
     assert.equal(cache.update(result({ api: { cpu: 0, memMB: 501.0 } })), true);
+  });
+});
+
+describe('StatsCache against a malformed stats frame', () => {
+  // The protocol is a hand-written copy that nothing validates (CLAUDE.md
+  // rule 2). Caching a bad entry and then comparing against it next poll used
+  // to throw inside pollStats' bare catch, so the cache was never assigned and
+  // every later poll re-entered the same throw — the tree and status bar froze
+  // on stale numbers for the rest of the session, silently.
+  const junk = { services: { api: null, web: 'nope', ok: { cpu: 1, memMB: 100 } } } as never;
+
+  it('drops entries that are not a pair of numbers, and keeps the good one', () => {
+    const cache = new StatsCache();
+    cache.update(junk);
+    assert.equal(cache.get('api'), null);
+    assert.equal(cache.get('web'), null);
+    assert.deepEqual(cache.get('ok'), { cpu: 1, memMB: 100 });
+  });
+
+  it('still updates on the next poll instead of wedging', () => {
+    const cache = new StatsCache();
+    cache.update(junk);
+    assert.equal(cache.update(result({ api: { cpu: 2, memMB: 200 }, ok: { cpu: 1, memMB: 100 } })), true);
+    assert.deepEqual(cache.get('api'), { cpu: 2, memMB: 200 });
+  });
+
+  it('drops NaN, which would otherwise be rendered as "NaN MB"', () => {
+    const cache = new StatsCache();
+    cache.update({ services: { api: { cpu: Number.NaN, memMB: 100 } }, system });
+    assert.equal(cache.get('api'), null);
   });
 });
