@@ -22,30 +22,15 @@ function getDevupCommand(): string {
   return 'npx devup';
 }
 
-/** When the daemon has just been asked to start, retry sooner than the
- *  reconnect backoff would on its own.
+/** How long to keep retrying quickly after the user starts or restarts the
+ *  daemon. Long enough for `devup down` and a full boot of a large stack;
+ *  after that the ordinary backoff takes over.
  *
- *  Without this, starting the daemon from the button next to the welcome view
- *  and then watching the sidebar keep saying "not running" for up to 30 s is
- *  the normal experience — the backoff has usually climbed to its ceiling by
- *  the time anyone gets around to pressing it. Each nudge resets the backoff,
- *  so the attempts land while a stack is still booting rather than after it. */
-const NUDGE_DELAYS_MS = [2_000, 6_000, 12_000];
-
-/** One set at a time, replaced on each start/restart. Registering a fresh
- *  disposable per invocation would pile up dead closures in
- *  `context.subscriptions` for the life of the window. */
-let nudgeTimers: NodeJS.Timeout[] = [];
-
-function nudgeReconnect(store: StatusStore): void {
-  cancelNudges();
-  nudgeTimers = NUDGE_DELAYS_MS.map(delay => setTimeout(() => store.refresh(), delay));
-}
-
-function cancelNudges(): void {
-  for (const timer of nudgeTimers) clearTimeout(timer);
-  nudgeTimers = [];
-}
+ *  Without it, the normal experience is starting the daemon from the button
+ *  beside the welcome view and then watching the sidebar say "not running"
+ *  for up to 30 s after the stack is up, because the backoff has usually
+ *  climbed to its ceiling by the time anyone presses that button. */
+const RESTART_WINDOW_MS = 60_000;
 
 export function registerDaemonCommands(
   context: vscode.ExtensionContext,
@@ -57,13 +42,11 @@ export function registerDaemonCommands(
       const term = getOrCreateTerminal(workspaceCwd);
       term.show();
       term.sendText(`${getDevupCommand()} up -d`);
-      nudgeReconnect(store);
+      store.expectRestart(RESTART_WINDOW_MS);
     }),
 
     vscode.commands.registerCommand('devup.daemon.stop', () => {
-      // Cancel any nudges still pending from a start: retrying hard against a
-      // daemon the user has just asked to go away is not helpful.
-      cancelNudges();
+      store.cancelExpectedRestart();
       const term = getOrCreateTerminal(workspaceCwd);
       term.show();
       term.sendText(`${getDevupCommand()} down`);
@@ -77,9 +60,7 @@ export function registerDaemonCommands(
       // to bring one up afterwards. Hence `;` rather than `&&`.
       const devup = getDevupCommand();
       term.sendText(`${devup} down ; ${devup} up -d`);
-      nudgeReconnect(store);
+      store.expectRestart(RESTART_WINDOW_MS);
     }),
-
-    { dispose: cancelNudges },
   );
 }

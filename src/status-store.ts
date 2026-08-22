@@ -1,7 +1,7 @@
 import * as vscode from 'vscode';
 import { openStream, sendRpc, type Subscription, type StreamFrame } from './socket-client.js';
 import { StatsCache, type StatsResult } from './stats-cache.js';
-import { Backoff } from './backoff.js';
+import { Backoff, reconnectDelay } from './backoff.js';
 
 export type { ServiceSnapshot, ProjectInfo, ProxyInfo, ServiceStats, SystemStats, ConnectionState } from './types.js';
 import type { ServiceSnapshot, ProjectInfo, ProxyInfo, ServiceStats, SystemStats, ConnectionState } from './types.js';
@@ -16,6 +16,9 @@ export class StatusStore implements vscode.Disposable {
   private proxy: ProxyInfo | null = null;
   private readonly stats = new StatsCache();
   private readonly backoff = new Backoff();
+  /** Epoch millis until which reconnects retry at a fixed short delay. Set by
+   *  `expectRestart()`; 0 means the backoff decides on its own. */
+  private fastRetryUntil = 0;
   private subscription: Subscription | null = null;
   private reconnectTimer: NodeJS.Timeout | null = null;
   private statsTimer: NodeJS.Timeout | null = null;
@@ -193,12 +196,29 @@ export class StatusStore implements vscode.Disposable {
     this.scheduleReconnect();
   }
 
+  /** The daemon has just been asked to start or restart, so a disconnect is
+   *  expected and so is a quick recovery. Retry every couple of seconds for
+   *  the window, rather than leaving the user watching "not running" for half
+   *  a minute after their stack is up. */
+  expectRestart(windowMs = 60_000): void {
+    if (this.disposed) return;
+    this.fastRetryUntil = Date.now() + windowMs;
+    this.refresh();
+  }
+
+  /** Called when the user stops the daemon: retrying hard against something
+   *  they have just asked to go away helps nobody. */
+  cancelExpectedRestart(): void {
+    this.fastRetryUntil = 0;
+  }
+
   private scheduleReconnect(): void {
     if (this.reconnectTimer || this.disposed) return;
+    const delay = reconnectDelay(this.backoff, this.fastRetryUntil, Date.now());
     this.reconnectTimer = setTimeout(() => {
       this.reconnectTimer = null;
       void this.connect();
-    }, this.backoff.next());
+    }, delay);
   }
 
   dispose(): void {

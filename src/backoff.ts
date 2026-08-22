@@ -30,3 +30,19 @@ export class Backoff {
     this.attempt = 0;
   }
 }
+
+/** Delay before the next reconnect attempt, honouring a "the daemon was just
+ *  asked to restart" window.
+ *
+ *  Scheduling nudges at fixed offsets from the command does not work: on a
+ *  restart the daemon is still up when they fire — the shell has not finished
+ *  `devup down` — so they find a healthy connection, do nothing, and the drop
+ *  that follows is left to the unassisted backoff. A window instead covers the
+ *  whole restart however long it takes, and expires on its own.
+ *
+ *  Note the asymmetry: inside the window the backoff is not advanced at all,
+ *  so a restart that outlasts it resumes from where it was rather than from a
+ *  ceiling it never earned. */
+export function reconnectDelay(backoff: Backoff, fastUntil: number, now: number, fastMs = 2_000): number {
+  return now < fastUntil ? fastMs : backoff.next();
+}

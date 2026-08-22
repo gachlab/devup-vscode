@@ -1,6 +1,6 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { Backoff } from '../../src/backoff.js';
+import { Backoff, reconnectDelay } from '../../src/backoff.js';
 
 describe('Backoff', () => {
   it('starts at the base delay', () => {
@@ -28,5 +28,35 @@ describe('Backoff', () => {
   it('honours custom bounds', () => {
     const b = new Backoff(1000, 4000);
     assert.deepEqual([b.next(), b.next(), b.next(), b.next()], [1000, 2000, 4000, 4000]);
+  });
+});
+
+describe('reconnectDelay', () => {
+  it('uses the short delay inside a restart window', () => {
+    const b = new Backoff();
+    assert.equal(reconnectDelay(b, 10_000, 5_000), 2000);
+  });
+
+  it('does not advance the backoff while the window holds', () => {
+    // A restart that outlasts the window must resume from where the backoff
+    // was, not from a ceiling it never earned.
+    const b = new Backoff();
+    reconnectDelay(b, 10_000, 5_000);
+    reconnectDelay(b, 10_000, 6_000);
+    reconnectDelay(b, 10_000, 7_000);
+    assert.equal(reconnectDelay(b, 10_000, 20_000), 3000);
+  });
+
+  it('falls back to the backoff once the window has passed', () => {
+    const b = new Backoff();
+    assert.deepEqual(
+      [reconnectDelay(b, 0, 1_000), reconnectDelay(b, 0, 2_000)],
+      [3000, 6000],
+    );
+  });
+
+  it('treats the instant the window expires as expired', () => {
+    const b = new Backoff();
+    assert.equal(reconnectDelay(b, 10_000, 10_000), 3000);
   });
 });
