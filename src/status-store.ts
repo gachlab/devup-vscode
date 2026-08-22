@@ -75,13 +75,21 @@ export class StatusStore implements vscode.Disposable {
       // interval and the stream below outlive the extension, and nothing is
       // left holding a reference to clear them.
       if (this.disposed) return;
+      // `onConnectionLost()` can have run while the probe was in flight — a
+      // late close from the previous socket — arming a reconnect. Left armed,
+      // it fires against this healthy connection: the state flickers back
+      // through 'connecting', the tree empties, and the live subscription is
+      // replaced without being closed.
+      if (this.reconnectTimer) { clearTimeout(this.reconnectTimer); this.reconnectTimer = null; }
       this.services.clear();
       for (const s of snapshot.services ?? []) this.services.set(s.name, s);
       this.proxy = snapshot.proxy ?? null;
       if (infoResult) this.info = infoResult;
       this.state = 'connected';
-      this.emitter.fire();
+      // Before the event, not after: this drops stats left over from the
+      // previous connection, and firing first would render them once more.
       this.startStatsPolling();
+      this.emitter.fire();
     } catch {
       this.state = 'unreachable';
       this.services.clear();
@@ -90,6 +98,10 @@ export class StatusStore implements vscode.Disposable {
       return;
     }
 
+    // Belt and braces with the timer clear above: never overwrite a live
+    // subscription, or its socket stays open for the life of the window,
+    // writing into `services` and firing events from a stream nobody owns.
+    this.subscription?.close();
     this.subscription = openStream(
       this.socketPath, 'status.follow', {},
       (frame: StreamFrame) => {

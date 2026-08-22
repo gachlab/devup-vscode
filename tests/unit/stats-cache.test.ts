@@ -197,6 +197,20 @@ describe('StatsCache against a malformed stats frame', () => {
     assert.deepEqual(cache.get('api'), { cpu: 2, memMB: 200 });
   });
 
+  it('survives a result that is not an object at all', () => {
+    // sendRpc resolves the response's `result` field verbatim, so a daemon
+    // answering `{"id":1,"result":null}` — or omitting the key — lands here as
+    // null or undefined.
+    const cache = new StatsCache();
+    assert.equal(cache.update(null as never), false);
+    assert.equal(cache.update(undefined as never), false);
+    cache.update(result({ api: { cpu: 1, memMB: 100 } }));
+    // Whatever was cached is no longer being reported: dropping it is a change.
+    assert.equal(cache.update(null as never), true);
+    assert.equal(cache.get('api'), null);
+    assert.equal(cache.getSystem(), null);
+  });
+
   it('drops NaN, which would otherwise be rendered as "NaN MB"', () => {
     const cache = new StatsCache();
     cache.update({ services: { api: { cpu: Number.NaN, memMB: 100 } }, system });

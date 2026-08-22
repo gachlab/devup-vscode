@@ -28,6 +28,13 @@ export class StatsCache {
 
   /** Replace the cached stats; true when the new numbers differ from the old. */
   update(result: StatsResult): boolean {
+    // `sendRpc` resolves whatever sat in the response's `result` field, so a
+    // daemon answering with null — or with no result key at all — arrives
+    // here as null or undefined. Dereferencing it would throw into
+    // `pollStats`' bare catch and wedge the cache for the session, which is
+    // the very failure `readServices` below exists to prevent; the guard just
+    // has to start one level higher.
+    if (!result || typeof result !== 'object') return this.clear();
     const services = readServices(result.services);
     const system = result.system ?? null;
     const changed = !sameServices(this.services, services) || !sameSystem(this.system, system);

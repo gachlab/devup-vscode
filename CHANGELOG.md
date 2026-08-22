@@ -12,8 +12,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **The whole UI recomputed every 3 seconds whether or not anything moved** (#40). The `stats` poll fired a change event on every tick, so the tree, status bar, badge, context key and every open detail panel re-rendered continuously — the reason `PortForwarder` had to keep its own fingerprint to filter the noise. The store now compares against the previous poll and stays quiet when nothing moved — by what the UI would *render*, not by the raw fields. That distinction is the fix: the daemon recomputes host free memory from `os.freemem()` on every poll and reports service RSS to a tenth of a megabyte, so both numbers change on essentially every tick on a live machine while the `31 GB` and `184 MB` built from them do not. Comparing the fields would have left the event firing every 3 s exactly as before. The poll is *not* paused when the tree is hidden, as the issue also suggested: the status bar consumes the same stats and is always on screen.
 - **Reconnecting to a daemon that is not running retried every 3 s forever** (#41), roughly 1,200 socket opens an hour against a path that does not exist. The delay now doubles from 3 s to a 30 s ceiling, and resets once a connection has demonstrably worked — on the first frame of the status stream, not on the one-shot probe, since a daemon whose stream fails immediately would otherwise pin the retry at a flat 3 s. A daemon that comes back while the delay is at the ceiling is therefore noticed within 30 s; **`devup: Refresh services` now retries immediately** instead of doing nothing, and is back as a button in the view title; starting or restarting the daemon from the extension also retries while the stack boots, rather than leaving the sidebar saying "not running" for half a minute after it is up.
 
+### Also fixed along the way
+- A `close()` on a log or status stream no longer reports itself as a lost connection. Nothing depended on it, and it made replacing a subscription unsafe: the store would flip to "not running", empty the tree and schedule a reconnect moments after opening a stream that was working.
+
 ### Internal
-- New vscode-free modules `src/stats-cache.ts` (stats comparison) and `src/backoff.ts`, plus `formatSystemStats` / `formatSystemTooltip` / `systemStatsKey` in `src/url-builder.ts` — 45 new unit tests, each verified by mutation.
+- New vscode-free modules `src/stats-cache.ts` (stats comparison) and `src/backoff.ts`, plus `formatSystemStats` / `formatSystemTooltip` / `systemStatsKey` in `src/url-builder.ts` — 46 new unit tests, each verified by mutation.
 
 ## [0.7.0] — 2026-08-21
 
@@ -45,6 +48,9 @@ A minor rather than a patch: the default changes behaviour for anyone who never 
 
   Not covered: with devup's reverse proxy active, `devup: Open in browser` targets `<sub>.<domain>`, which resolves on the remote host and not on yours. The underlying service ports are still forwarded, so reach them through the Ports view address.
 
+### Also fixed along the way
+- A `close()` on a log or status stream no longer reports itself as a lost connection. Nothing depended on it, and it made replacing a subscription unsafe: the store would flip to "not running", empty the tree and schedule a reconnect moments after opening a stream that was working.
+
 ### Internal
 - New vscode-free module `src/forward-logic.ts` (`selectForwardPorts`, `parseForwardMode`, `isPortIgnored`) with 14 unit tests.
 
@@ -67,6 +73,9 @@ UX improvements across tree view, detail panel, and notifications. Requires `@ga
 
 ### Fixed
 - **Tree context menu commands broken** (#27) — all commands triggered from the tree view (Open detail, Restart, Stop, Open in browser) were receiving the full tree Node object as argument instead of a service name string, resulting in `[object Object]`. Added `extractSvcName()` helper that handles all argument shapes.
+
+### Also fixed along the way
+- A `close()` on a log or status stream no longer reports itself as a lost connection. Nothing depended on it, and it made replacing a subscription unsafe: the store would flip to "not running", empty the tree and schedule a reconnect moments after opening a stream that was working.
 
 ### Internal
 - Extracted pure logic to vscode-free modules: `src/types.ts`, `src/svc-name.ts`, `src/tree-logic.ts`
