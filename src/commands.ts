@@ -32,7 +32,9 @@ export function registerServiceCommands(
   logChannels: LogChannels,
   socketPath: () => string,
   workspaceRoot: () => string,
-  projectName: () => string,
+  /** The daemon's own project name, or null when it is not known — which is
+   *  not the same as empty, and must not be papered over with a placeholder. */
+  projectName: () => string | null,
 ): void {
   context.subscriptions.push(
     vscode.commands.registerCommand('devup.tailLogs', async (arg?: ServiceArg) => {
@@ -117,7 +119,9 @@ export function registerServiceCommands(
     vscode.commands.registerCommand('devup.openLogFile', async (arg?: ServiceArg) => {
       const svc = await resolveServiceName(arg, store, 'Open the log file of which service?');
       if (!svc) return;
-      const file = logFileFor(projectName(), svc, logDirOverride());
+      const project = projectName();
+      if (!project) { void vscode.window.showWarningMessage(NO_PROJECT_NAME); return; }
+      const file = logFileFor(project, svc, logDirOverride());
       if (!existsSync(file)) {
         // Rotated per launch, so "not yet" is a normal state rather than an
         // error — and the path is what someone needs in order to check.
@@ -129,7 +133,9 @@ export function registerServiceCommands(
     }),
 
     vscode.commands.registerCommand('devup.revealLogs', async () => {
-      const dir = logDirFor(projectName(), logDirOverride());
+      const project = projectName();
+      if (!project) { void vscode.window.showWarningMessage(NO_PROJECT_NAME); return; }
+      const dir = logDirFor(project, logDirOverride());
       if (!existsSync(dir)) {
         void vscode.window.showWarningMessage(`devup: no logs folder yet.\n${dir}`);
         return;
@@ -147,22 +153,6 @@ export function registerServiceCommands(
       await vscode.commands.executeCommand('revealFileInOS', vscode.Uri.file(dir));
     }),
 
-    vscode.commands.registerCommand('devup.closeForwardedPorts', async () => {
-      if (!vscode.env.remoteName) {
-        void vscode.window.showInformationMessage('devup: nothing is forwarded — this is a local window.');
-        return;
-      }
-      // The editor owns tunnel lifetime and exposes no API to close one. Its
-      // own picker is the closest thing, and it at least removes the hunt.
-      try {
-        await vscode.commands.executeCommand('remote.tunnel.closeCommandPalette');
-      } catch {
-        void vscode.window.showWarningMessage(
-          'devup: this editor does not offer a close-port picker. Close them from the Ports view.',
-        );
-      }
-    }),
-
     vscode.commands.registerCommand('devup.refresh', () => {
       // Reconnecting is autonomous, but it backs off to 30 s while the daemon
       // stays down — so someone who has just started one should not have to
@@ -172,6 +162,13 @@ export function registerServiceCommands(
     }),
   );
 }
+
+/** Logs live under the project name, which with `devup.socketPath` set is a
+ *  thing the extension genuinely does not know: discovery has no name to
+ *  report, and the daemon's `info` RPC is allowed to fail. Building a path out
+ *  of a placeholder would send someone looking for a file that cannot exist. */
+const NO_PROJECT_NAME = 'devup: the project name is not known, so the log path cannot be resolved. '
+  + 'Set devup.projectName, or wait for the daemon to answer.';
 
 /** `devup --log-dir` moves the root and the daemon does not publish where to,
  *  so anyone using it has to say so here. */

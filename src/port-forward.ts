@@ -38,17 +38,31 @@ export class PortForwarder implements vscode.Disposable {
   /** Fires when the set of forwarded ports changes. */
   readonly onDidChangeForwarded = this.changeEmitter.event;
   private lastState: string | null = null;
+  /** Set by `devup: Close forwarded ports…`. The editor's picker is the only
+   *  way to close a tunnel, and it does not tell us which ones went — so
+   *  re-asserting on the 30 s timer would silently re-open everything the user
+   *  had just closed. Forwarding resumes when the daemon next connects, or
+   *  when `devup.portForwarding` changes. */
+  private paused = false;
 
   constructor(private readonly store: StatusStore) {}
+
+  /** Stop re-asserting until the daemon next connects. */
+  pause(): void {
+    if (this.paused) return;
+    this.paused = true;
+    this.lastWanted = '';
+    if (this.requested.size) {
+      this.requested.clear();
+      this.changeEmitter.fire();
+    }
+  }
 
   /** Whether a forward has been requested for this port. */
   isForwarded(port: number): boolean {
     return this.requested.has(port);
   }
 
-  get active(): boolean {
-    return this.requested.size > 0;
-  }
 
   start(): void {
     // Services appear as the daemon connects and change on hot reload. The
@@ -64,6 +78,8 @@ export class PortForwarder implements vscode.Disposable {
 
     this.subscriptions.push(vscode.workspace.onDidChangeConfiguration(e => {
       if (!e.affectsConfiguration('devup.portForwarding') && !e.affectsConfiguration('remote.portsAttributes')) return;
+      // An explicit change of intent resumes forwarding.
+      this.paused = false;
       this.lastWanted = '';
       void this.sync();
     }));
@@ -81,7 +97,18 @@ export class PortForwarder implements vscode.Disposable {
     const state = this.store.getState();
     const previous = this.lastState;
     this.lastState = state;
-    if (previous !== 'connected' || state === 'connected') return;
+    if (state === 'connected') {
+      // A working daemon is the signal to start forwarding again after a
+      // manual close.
+      if (this.paused) { this.paused = false; this.lastWanted = ''; void this.sync(); }
+      return;
+    }
+    if (previous !== 'connected') return;
+    // Only a daemon that went away unasked. A rename retargets the store,
+    // which passes through 'connecting'; a start or restart the user asked for
+    // opens the store's fast-retry window. Warning about either would be
+    // warning someone about something they just did.
+    if (state !== 'unreachable' || this.store.isRestartExpected()) return;
     if (!vscode.env.remoteName || !this.requested.size) return;
     const count = this.requested.size;
     // Whatever was open is now pointing at nothing; stop claiming otherwise.
@@ -111,7 +138,7 @@ export class PortForwarder implements vscode.Disposable {
   }
 
   private async sync(): Promise<void> {
-    if (this.disposed || !vscode.env.remoteName) return;
+    if (this.disposed || this.paused || !vscode.env.remoteName) return;
     const wanted = this.wantedPorts();
     let changed = false;
     // A port that is no longer wanted (service gone, mode narrowed) is no
@@ -131,8 +158,10 @@ export class PortForwarder implements vscode.Disposable {
         if (!this.requested.has(port)) { this.requested.add(port); changed = true; }
       } catch {
         // Transient — port not bound yet, or the resolver is busy mid-reconnect.
-        // The next pass retries.
-        if (this.requested.delete(port)) changed = true;
+        // The next pass retries. Deliberately does *not* drop the port from
+        // `requested`: whatever the editor already opened is still open, and
+        // forgetting it would flicker the tree marker and, on the last pass
+        // before a daemon dies, suppress the outage warning entirely.
       } finally {
         this.inFlight.delete(port);
       }

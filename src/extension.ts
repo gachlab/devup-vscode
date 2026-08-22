@@ -65,6 +65,30 @@ export function activate(context: vscode.ExtensionContext): void {
   // Menus branch on this: the port commands are meaningless locally.
   void vscode.commands.executeCommand('setContext', 'devup.remote', !!vscode.env.remoteName);
 
+  context.subscriptions.push(
+    vscode.commands.registerCommand('devup.closeForwardedPorts', async () => {
+      if (!vscode.env.remoteName) {
+        void vscode.window.showInformationMessage('devup: nothing is forwarded — this is a local window.');
+        return;
+      }
+      // The editor owns tunnel lifetime and exposes no API to close a tunnel,
+      // nor to report which ones the user closed in its picker. So stop
+      // re-asserting until the daemon next connects: without that, the 30 s
+      // re-assert silently re-opens everything they just closed.
+      portForwarder.pause();
+      try {
+        await vscode.commands.executeCommand('remote.tunnel.closeCommandPalette');
+        void vscode.window.showInformationMessage(
+          'devup: port forwarding paused. It resumes when the daemon next connects, or when you change devup.portForwarding.',
+        );
+      } catch {
+        void vscode.window.showWarningMessage(
+          'devup: this editor does not offer a close-port picker. Close them from the Ports view.',
+        );
+      }
+    }),
+  );
+
   // Live log streaming per service.
   const activeLogChannels = new LogChannels(socketPath);
   context.subscriptions.push(activeLogChannels);
@@ -109,9 +133,11 @@ export function activate(context: vscode.ExtensionContext): void {
 
   // Per-service commands (tailLogs / restart / stop / openInBrowser / refresh).
   // The daemon's own name for the project is authoritative — it is what it
-  // sanitises into the log directory. Discovery's is the fallback for when
-  // `info` has not answered yet.
-  const projectName = () => activeStore.getInfo().project || discovery.projectName;
+  // sanitises into the log directory. Discovery's is the fallback, except with
+  // `devup.socketPath` set, where it holds a placeholder rather than a name.
+  const projectName = (): string | null =>
+    activeStore.getInfo().project
+    || (discovery.source === 'socketPath setting' ? null : discovery.projectName);
   registerServiceCommands(context, activeStore, activeLogChannels, socketPath, folderPath, projectName);
 
   // Service detail webview panels.

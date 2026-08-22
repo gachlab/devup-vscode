@@ -121,7 +121,10 @@ function serviceItem(svc: ServiceSnapshot, store: StatusStore, forwarder?: PortF
   const item = new vscode.TreeItem(svc.name, vscode.TreeItemCollapsibleState.None);
   const stats = store.getServiceStats(svc.name);
   const statsStr = stats ? `  · ${formatCpu(stats.cpu)} · ${formatMem(stats.memMB)}` : '';
-  const forwarded = forwarder?.isForwarded(canonicalPort(svc)) ? '  $(radio-tower)' : '';
+  // Plain text: TreeItem.description is documented as "a human-readable
+  // string", and codicon substitution is only defined for status-bar and
+  // language-status text — `$(radio-tower)` would render literally here.
+  const forwarded = forwarder?.isForwarded(canonicalPort(svc)) ? '  · forwarded' : '';
   item.description = `:${canonicalPort(svc)}  ${svc.status}/${svc.health}${statsStr}${forwarded}`;
   item.iconPath = stats ? resourceIcon(svc, stats) : healthIcon(svc);
   item.contextValue = `service-${svc.type}`;

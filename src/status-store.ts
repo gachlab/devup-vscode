@@ -261,6 +261,13 @@ export class StatusStore implements vscode.Disposable {
     this.refresh();
   }
 
+  /** True while a start or restart the user asked for is still expected to
+   *  land. Consumers use it to tell "the daemon went away" from "the daemon is
+   *  being restarted on purpose". */
+  isRestartExpected(): boolean {
+    return Date.now() < this.fastRetryUntil;
+  }
+
   /** Called when the user stops the daemon: retrying hard against something
    *  they have just asked to go away helps nobody. */
   cancelExpectedRestart(): void {
