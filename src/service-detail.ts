@@ -13,7 +13,8 @@ export class ServiceDetailPanels implements vscode.Disposable {
 
   constructor(
     private readonly store: StatusStore,
-    private readonly socketPath: string,
+    /** Read late — see LogChannels for why. */
+    private readonly socketPath: () => string,
   ) {
     // When the store changes, push fresh service data to every open panel.
     this.storeSub = store.onDidChange(() => {
@@ -57,16 +58,7 @@ export class ServiceDetailPanels implements vscode.Disposable {
     });
 
     // Wire log streaming → webview.
-    const sub = openStream(
-      this.socketPath, 'logs.follow', { svc: svcName, tail: 30 },
-      (frame: StreamFrame) => {
-        if (frame.event === 'log' && typeof frame.data === 'string') {
-          void panel.webview.postMessage({ type: 'log', line: frame.data });
-        }
-      },
-      err => void panel.webview.postMessage({ type: 'log', line: `[devup] log stream error: ${err.message}` }),
-    );
-    this.subs.set(svcName, sub);
+    this.streamLogs(svcName, panel);
 
     panel.onDidDispose(() => {
       this.subs.get(svcName)?.close();
@@ -78,6 +70,28 @@ export class ServiceDetailPanels implements vscode.Disposable {
 
     // Push current service state immediately so the panel doesn't sit empty.
     void panel.webview.postMessage({ type: 'svc', svc, port: canonicalPort(svc) });
+  }
+
+  /** Re-open every panel's log stream against the current socket path. */
+  retarget(): void {
+    for (const [svcName, panel] of [...this.panels]) {
+      this.subs.get(svcName)?.close();
+      this.subs.delete(svcName);
+      this.streamLogs(svcName, panel);
+    }
+  }
+
+  private streamLogs(svcName: string, panel: vscode.WebviewPanel): void {
+    const sub = openStream(
+      this.socketPath(), 'logs.follow', { svc: svcName, tail: 30 },
+      (frame: StreamFrame) => {
+        if (frame.event === 'log' && typeof frame.data === 'string') {
+          void panel.webview.postMessage({ type: 'log', line: frame.data });
+        }
+      },
+      err => void panel.webview.postMessage({ type: 'log', line: `[devup] log stream error: ${err.message}` }),
+    );
+    this.subs.set(svcName, sub);
   }
 
   dispose(): void {

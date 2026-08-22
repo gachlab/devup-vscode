@@ -4,17 +4,18 @@
  *  Resolution order:
  *  1. `devup.socketPath` setting → use as-is.
  *  2. `devup.projectName` setting → ~/.devup/sock-<sanitised>.sock.
- *  3. Auto-detect: read `devup.config.{json,ts,js}` from the workspace root,
- *     extract `name`, build the socket path.
+ *  3. Auto-detect: read the project name out of `devup.config.{json,ts,js,mjs}`
+ *     in the chosen workspace folder.
+ *  4. Fall back to the folder name, which will almost never match a running
+ *     daemon — `diagnose()` says so rather than leaving the user guessing.
  *
- *  Auto-detect is best-effort — for .ts/.js we use a regex to find the name
- *  literal (no module loading), which is good enough for the common case
- *  (`defineConfig({ name: 'X', ... })`). Users with exotic configs can set
- *  `devup.projectName` or `devup.socketPath` directly. */
-import { existsSync, readFileSync } from 'node:fs';
+ *  Nothing here loads the config as a module: a config file is arbitrary code,
+ *  and running it to read one string is not a trade worth making. See
+ *  `config-file.ts` for how the name is found instead. */
 import { join } from 'node:path';
 import { homedir } from 'node:os';
 import * as vscode from 'vscode';
+import { findConfigFile, readProjectName } from './config-file.js';
 
 const SAFE = /[^a-zA-Z0-9._-]+/g;
 export function sanitize(name: string): string {
@@ -32,52 +33,56 @@ export interface DiscoveryResult {
   projectName: string;
   /** How we figured it out — useful for error messages. */
   source: 'socketPath setting' | 'projectName setting' | 'config file' | 'fallback';
+  /** The workspace folder discovery looked in. */
+  folder: vscode.WorkspaceFolder;
+  /** The config file found in that folder, or null when there is none. */
+  configFile: string | null;
 }
 
-/** Discover the socket path for the current workspace. Returns null if there's
- *  no workspace folder open at all. */
-export function discover(folder: vscode.WorkspaceFolder): DiscoveryResult | null {
+/** The workspace folder to talk about.
+ *
+ *  `workspaceFolders[0]` was not good enough: the activation event
+ *  (`workspaceContains:devup.config.ts`) fires on a match in *any* folder, so
+ *  in a multi-root workspace with devup in the second one the extension woke
+ *  up and then looked in the first. Prefer a folder that actually has a
+ *  config; fall back to the first so the welcome view still has something to
+ *  report. */
+export function pickFolder(folders: readonly vscode.WorkspaceFolder[]): vscode.WorkspaceFolder | null {
+  for (const folder of folders) {
+    if (findConfigFile(folder.uri.fsPath)) return folder;
+  }
+  return folders[0] ?? null;
+}
+
+/** Discover the socket path for the given folder. */
+export function discover(folder: vscode.WorkspaceFolder): DiscoveryResult {
   const cfg = vscode.workspace.getConfiguration('devup', folder);
+  const configFile = findConfigFile(folder.uri.fsPath);
+  const base = { folder, configFile };
 
   const overrideSocket = cfg.get<string>('socketPath')?.trim();
   if (overrideSocket) {
-    return { socketPath: overrideSocket, projectName: '(socket override)', source: 'socketPath setting' };
+    return { ...base, socketPath: overrideSocket, projectName: '(socket override)', source: 'socketPath setting' };
   }
 
   const overrideName = cfg.get<string>('projectName')?.trim();
   if (overrideName) {
-    return { socketPath: defaultSocketPath(overrideName), projectName: overrideName, source: 'projectName setting' };
+    return { ...base, socketPath: defaultSocketPath(overrideName), projectName: overrideName, source: 'projectName setting' };
   }
 
-  const detected = readNameFromConfig(folder.uri.fsPath);
+  const detected = readProjectName(folder.uri.fsPath);
   if (detected) {
-    return { socketPath: defaultSocketPath(detected), projectName: detected, source: 'config file' };
+    return { ...base, configFile: detected.file, socketPath: defaultSocketPath(detected.name), projectName: detected.name, source: 'config file' };
   }
 
   // Fallback: workspace folder name. Won't match any running daemon unless the
-  // user happens to name their project the same as the folder, but at least we
-  // produce a sensible socket path for the "not running" branch.
-  const fallback = folder.name;
-  return { socketPath: defaultSocketPath(fallback), projectName: fallback, source: 'fallback' };
+  // user happens to name their project the same as the folder, so the welcome
+  // view says as much instead of reporting a generic "not running".
+  return { ...base, socketPath: defaultSocketPath(folder.name), projectName: folder.name, source: 'fallback' };
 }
 
-function readNameFromConfig(workspacePath: string): string | null {
-  const jsonPath = join(workspacePath, 'devup.config.json');
-  if (existsSync(jsonPath)) {
-    try {
-      const parsed = JSON.parse(readFileSync(jsonPath, 'utf8'));
-      if (typeof parsed?.name === 'string' && parsed.name.trim()) return parsed.name.trim();
-    } catch { /* fall through to .ts/.js */ }
-  }
-  for (const variant of ['devup.config.ts', 'devup.config.js', 'devup.config.mjs']) {
-    const p = join(workspacePath, variant);
-    if (!existsSync(p)) continue;
-    try {
-      const src = readFileSync(p, 'utf8');
-      // Regex match `name: 'X'` or `name: "X"` (most common: inside defineConfig({ ... })).
-      const m = /\bname\s*:\s*['"`]([^'"`]+)['"`]/.exec(src);
-      if (m && m[1]) return m[1];
-    } catch { /* try the next variant */ }
-  }
-  return null;
+/** Discovery for the current workspace, or null when no folder is open. */
+export function discoverWorkspace(): DiscoveryResult | null {
+  const folder = pickFolder(vscode.workspace.workspaceFolders ?? []);
+  return folder ? discover(folder) : null;
 }

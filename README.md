@@ -31,16 +31,18 @@ Talks to a running devup daemon via its Unix-socket control plane — no separat
 | Log filter in detail panel — live search with match count | 0.5.0 |
 | Stats per service (CPU% · mem) in tree + system totals in status bar | 0.4.0 |
 | Proxy-aware URLs in "Open in browser" (Traefik / Caddy / nginx) | 0.4.0 |
+| Follows a project rename — discovery re-runs on config and setting changes | 0.8.0 |
+| Welcome view explains *why* the daemon is unreachable, with the action to fix it | 0.8.0 |
 | Resolves local `node_modules` devup before global install | 0.2.1 |
 
 ## How it works
 
 1. The extension activates when your workspace contains `devup.config.{ts,js,json}`.
-2. It resolves the project `name` from that file and connects to `~/.devup/sock-<name>.sock`.
+2. It resolves the project `name` from that file — the top-level one, wherever it sits in the object — and connects to `~/.devup/sock-<name>.sock`. In a multi-root workspace it uses the folder that actually has a config. If the name cannot be read, the sidebar says so and offers to set `devup.projectName`, rather than reporting a generic "not running".
 3. It opens a persistent `status.follow` stream — service state updates arrive in real time with no polling.
 4. When the daemon goes down, the extension shows a welcome view and reconnects on its own — after 3 s, then doubling to at most 30 s while it stays down. `devup: Refresh services` retries immediately if you do not want to wait for the next attempt.
 
-All data (service status, health, phase, profiles) comes exclusively from the daemon's control-plane RPC — the extension never reads your config file directly.
+All data (service status, health, phase, profiles) comes exclusively from the daemon's control-plane RPC. The config file is read for one thing only — the project name that resolves the socket path — and it is scanned, never loaded as a module. It is also watched: renaming a project moves its socket, and the extension follows it without a window reload.
 
 ## Configuration
 

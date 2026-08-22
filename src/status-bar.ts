@@ -9,7 +9,7 @@ export class DevupStatusBar implements vscode.Disposable {
   private readonly item: vscode.StatusBarItem;
   private readonly storeSub: vscode.Disposable;
 
-  constructor(private readonly discovery: DiscoveryResult, private readonly store: StatusStore) {
+  constructor(private discovery: DiscoveryResult, private readonly store: StatusStore) {
     this.item = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 100);
     this.item.command = 'devup.tailLogs';
     this.item.text = 'devup: connecting…';
@@ -17,6 +17,12 @@ export class DevupStatusBar implements vscode.Disposable {
     this.item.show();
 
     this.storeSub = store.onDidChange(() => this.render());
+    this.render();
+  }
+
+  /** Discovery can re-resolve while the window is open. */
+  setDiscovery(discovery: DiscoveryResult): void {
+    this.discovery = discovery;
     this.render();
   }
 

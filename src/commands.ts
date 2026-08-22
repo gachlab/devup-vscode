@@ -28,7 +28,8 @@ export function registerServiceCommands(
   context: vscode.ExtensionContext,
   store: StatusStore,
   logChannels: LogChannels,
-  socketPath: string,
+  socketPath: () => string,
+  workspaceRoot: () => string,
 ): void {
   context.subscriptions.push(
     vscode.commands.registerCommand('devup.tailLogs', async (arg?: ServiceArg) => {
@@ -40,7 +41,7 @@ export function registerServiceCommands(
       const svc = await resolveServiceName(arg, store, 'Restart which service?');
       if (!svc) return;
       try {
-        await sendRpc(socketPath, 'restart', { svc });
+        await sendRpc(socketPath(), 'restart', { svc });
         void vscode.window.showInformationMessage(`devup: restart sent to "${svc}"`);
       } catch (e) {
         void vscode.window.showErrorMessage(`devup: restart failed — ${rpcMessage(e)}`);
@@ -51,7 +52,7 @@ export function registerServiceCommands(
       const svc = await resolveServiceName(arg, store, 'Stop which service?');
       if (!svc) return;
       try {
-        await sendRpc(socketPath, 'stop', { svc });
+        await sendRpc(socketPath(), 'stop', { svc });
         void vscode.window.showInformationMessage(`devup: stop sent to "${svc}"`);
       } catch (e) {
         void vscode.window.showErrorMessage(`devup: stop failed — ${rpcMessage(e)}`);
@@ -91,8 +92,9 @@ export function registerServiceCommands(
       if (!svcName) return;
       const svc = store.getAll().find(s => s.name === svcName);
       if (!svc?.cwd) { void vscode.window.showWarningMessage(`devup: cwd not available for "${svcName}"`); return; }
-      const workspaceRoot = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath ?? '';
-      const fullCwd = svc.cwd.startsWith('/') ? svc.cwd : `${workspaceRoot}/${svc.cwd}`;
+      // The devup folder, which in a multi-root workspace is not necessarily
+      // the first one — service cwds are relative to the config's folder.
+      const fullCwd = svc.cwd.startsWith('/') ? svc.cwd : `${workspaceRoot()}/${svc.cwd}`;
       const term = vscode.window.createTerminal({ name: `devup: ${svcName}`, cwd: fullCwd });
       term.show();
     }),

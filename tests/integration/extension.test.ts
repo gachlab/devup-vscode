@@ -22,6 +22,9 @@ suite('Extension Integration', () => {
       'devup.daemon.restart',
       'devup.openServiceDetail',
       'devup.pickProfile',
+      'devup.openTerminal',
+      'devup.diagnostics',
+      'devup.setProjectName',
     ];
     for (const cmd of expected) {
       assert.ok(devupCmds.includes(cmd), `command ${cmd} should be registered`);

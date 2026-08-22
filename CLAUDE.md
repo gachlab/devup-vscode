@@ -63,13 +63,25 @@ Subscribers that do real work per event — `PortForwarder` re-asserting 25
 tunnels — should still keep their own fingerprint. The store is quiet, not
 silent.
 
-## 5. Discovery runs once, at activation
+## 5. The socket path is late-bound, and the project name is parsed, not grepped
 
-`discover()` is called a single time and nothing watches `devup.config.*`.
-Renaming a project moves its socket and the extension goes quiet until the
-window is reloaded. The project name is also parsed with a regex that takes
-the **first** `name:` in the file — put `services` before `name` and it latches
-onto a service. See issue #38.
+Discovery re-runs on a watcher over `devup.config.*`, on the two overriding
+settings, and when workspace folders change, because renaming a project moves
+its socket — that used to leave the extension quiet until the window was
+reloaded (issue #38). So **nothing may capture `socketPath` at construction**:
+`StatusStore` owns it and re-connects through `setSocketPath()`, and everyone
+else takes a `() => string`. Anything that holds a stream has to expose a
+`retarget()` for the change.
+
+The name is read with a small scanner anchored to the config object
+(`config-file.ts`), not a regex: `/name\s*:/` takes the **first** match in the
+file, so a config that declares `services` before `name` — a legal reordering
+— latched onto the first service. The scanner skips strings and comments and
+only accepts a key at the object's own top level. Never load the config as a
+module to read it; it is arbitrary code.
+
+The folder is the first one that has a config, not `workspaceFolders[0]`: the
+activation event fires on a match in *any* folder.
 
 ## 6. Installing an extension does not reload the extension host
 

@@ -19,6 +19,8 @@ export class StatusStore implements vscode.Disposable {
   /** Epoch millis until which reconnects retry at a fixed short delay. Set by
    *  `expectRestart()`; 0 means the backoff decides on its own. */
   private fastRetryUntil = 0;
+  /** A socket path change that arrived while a connect was in flight. */
+  private pendingRestart = false;
   private subscription: Subscription | null = null;
   private reconnectTimer: NodeJS.Timeout | null = null;
   private statsTimer: NodeJS.Timeout | null = null;
@@ -36,7 +38,7 @@ export class StatusStore implements vscode.Disposable {
   readonly onDidChange = this.emitter.event;
   private disposed = false;
 
-  constructor(private readonly socketPath: string) {}
+  constructor(private socketPath: string) {}
 
   start(): void {
     void this.connect();
@@ -57,10 +59,49 @@ export class StatusStore implements vscode.Disposable {
     } finally {
       this.connecting = false;
     }
-    if (this.refreshPending && !this.disposed) {
+    if (this.disposed) return;
+    // Order matters: a path change supersedes a refresh, since the refresh was
+    // aimed at a daemon we are no longer talking to.
+    if (this.pendingRestart) {
+      this.pendingRestart = false;
+      this.refreshPending = false;
+      this.restart();
+      return;
+    }
+    if (this.refreshPending) {
       this.refreshPending = false;
       this.refresh();
     }
+  }
+
+  /** Point the store at a different daemon.
+   *
+   *  Discovery re-runs whenever `devup.config.*` or the overriding settings
+   *  change, and renaming a project moves its socket — so this is the normal
+   *  way a rename is picked up, rather than the window reload it used to
+   *  need (issue #38). */
+  setSocketPath(path: string): void {
+    if (this.disposed || path === this.socketPath) return;
+    this.socketPath = path;
+    // A connect in flight is probing the old path and would open its stream on
+    // the new one; let it finish and restart cleanly instead.
+    if (this.connecting) { this.pendingRestart = true; return; }
+    this.restart();
+  }
+
+  getSocketPath(): string { return this.socketPath; }
+
+  private restart(): void {
+    this.subscription?.close();
+    this.subscription = null;
+    if (this.reconnectTimer) { clearTimeout(this.reconnectTimer); this.reconnectTimer = null; }
+    this.stopStatsPolling();
+    this.backoff.reset();
+    this.services.clear();
+    this.proxy = null;
+    this.state = 'connecting';
+    this.emitter.fire();
+    void this.connect();
   }
 
   private async doConnect(): Promise<void> {
