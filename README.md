@@ -33,6 +33,7 @@ Talks to a running devup daemon via its Unix-socket control plane — no separat
 | Proxy-aware URLs in "Open in browser" (Traefik / Caddy / nginx) | 0.4.0 |
 | Follows a project rename — discovery re-runs on config and setting changes | 0.8.0 |
 | Welcome view explains *why* the daemon is unreachable, with the action to fix it | 0.8.0 |
+| Services dropped by a hot reload leave the sidebar (needs devup ≥ 0.14.0) | 0.8.0 |
 | Resolves local `node_modules` devup before global install | 0.2.1 |
 
 ## How it works
@@ -57,7 +58,7 @@ All data (service status, health, phase, profiles) comes exclusively from the da
 ## Requirements
 
 - VS Code ≥ 1.85
-- [@gachlab/devup](https://www.npmjs.com/package/@gachlab/devup) **≥ 0.10.1** running locally (uses `info`, `stats`, and `proxy` RPC methods).
+- [@gachlab/devup](https://www.npmjs.com/package/@gachlab/devup) **≥ 0.10.1** running locally (uses `info`, `stats`, and `proxy` RPC methods). **≥ 0.12.0** for correct ports on lazy services, and **≥ 0.14.0** for host CPU in the status bar and for services to leave the sidebar when a hot reload drops them. Older daemons keep working, minus those.
 - Linux or macOS. Windows is not yet supported by the devup daemon.
 
 ## Install

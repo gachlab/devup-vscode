@@ -12,6 +12,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **`devup: Set the project name…`**, reachable from the welcome view and the Command Palette, writes `devup.projectName` to the workspace.
 
 ### Fixed
+- **Services removed by a hot reload lingered in the sidebar** (#39). The stream handler only ever set keys, and `status` frames are incremental after the opening snapshot — so nothing could ever leave the map. A service deleted from the config stayed in the tree, in the status-bar totals and in every quick-pick until the connection dropped. It also made the "config reloaded — removed: …" notification unreachable: the diff it was built on could not produce a removal. devup 0.14.0 publishes `removed` frames (gachlab/devup#82), which the extension now applies. Against an older daemon the old behaviour stands, since there is nothing to tell it.
 - **Discovery ran once, at activation** (#38), so renaming a project moved its socket and the extension went quiet until the window was reloaded — as happened renaming `GuestHub` to `Guesthub`. It now re-runs on a watcher over `devup.config.*`, on `devup.projectName` / `devup.socketPath`, and when workspace folders change, reconnecting the status stream and every open log channel and detail panel to the new socket.
 - **The project name was matched with a regex that took the first `name:` in the file**, so a config declaring `services` before `name` — a legal reordering — resolved to the first *service* name and the extension talked to a socket that never existed. It is now read with a scanner anchored to the config object, which skips strings and comments and accepts only a key at the object's own top level, and which handles `defineConfig({…})`, a plain default export, `module.exports`, quoted keys and type arguments. A name that is an interpolated template literal is refused rather than resolved to something like `sock-pkg.name.sock` — the sidebar says the name could not be read, which is the truth. A `devup.config.json` is parsed rather than scanned. Which file wins now mirrors devup's own loader — `devup.config.ts`, then `.js`, then `.json`, first one that exists — because a repo carrying two of them would otherwise run under one name and be looked for under the other.
 - **The socket path for a name with unsafe characters did not match the daemon's.** The extension trimmed leading and trailing underscores after sanitising and devup does not, so a project called `@gachlab/web` was looked for at `sock-gachlab_web.sock` while the daemon listened on `sock-_gachlab_web.sock` — reported, of course, as "no daemon is running".
@@ -25,8 +26,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Internal
 - New vscode-free modules `src/stats-cache.ts` (stats comparison) and `src/backoff.ts`, plus `formatSystemStats` / `formatSystemTooltip` / `systemStatsKey` in `src/url-builder.ts`.
+- New vscode-free module `src/service-map.ts` — applying one stream frame to the service map, including the entries it must refuse.
 - New vscode-free modules `src/config-file.ts` (the config scanner, tested against real files on disk), `src/socket-path.ts` (checked against devup's own rule name by name) and `src/diagnosis.ts` (which of the four situations we are in, and the text for it). `StatusStore` owns its socket path and re-connects through `setSocketPath()`; `LogChannels` and `ServiceDetailPanels` take a `() => string` and expose `retarget()`, so nothing captures a path a rename can invalidate.
-- 92 new unit tests, each verified by mutation.
+- 106 new unit tests, each verified by mutation.
 
 ## [0.7.0] — 2026-08-21
 
