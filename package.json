@@ -236,7 +236,7 @@
       },
       {
         "command": "devup.debugService",
-        "title": "devup: Debug service",
+        "title": "devup: Debug service (attach)",
         "icon": "$(debug-alt)"
       },
       {
@@ -361,7 +361,7 @@
         },
         {
           "command": "devup.debugService",
-          "when": "view == devupServices && viewItem =~ /^service-/",
+          "when": "view == devupServices && viewItem =~ /service-/",
           "group": "1_actions@7"
         },
         {

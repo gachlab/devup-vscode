@@ -35,19 +35,30 @@ export function sendRpc(
       return;
     }
     const c = createConnection(socketPath);
-    const timer = setTimeout(() => {
+    // One settlement, whichever comes first. Without this a call that outlives
+    // its connection — the daemon going down mid-request, or the server
+    // closing its clients — waits out the whole timeout, which for a slow
+    // request like `debug` is two minutes of a progress notification spinning
+    // over a socket that is already gone.
+    let settled = false;
+    const settle = (act: () => void): void => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      act();
+    };
+    const timer = setTimeout(() => settle(() => {
       c.destroy();
       reject(new RpcCallError(`timed out after ${timeoutMs}ms`, socketPath));
-    }, timeoutMs);
+    }), timeoutMs);
 
-    c.on('error', err => {
-      clearTimeout(timer);
-      reject(new RpcCallError(err.message, socketPath));
-    });
+    c.on('error', err => settle(() => reject(new RpcCallError(err.message, socketPath))));
+    c.on('close', () => settle(() => reject(
+      new RpcCallError('connection closed before the daemon answered', socketPath),
+    )));
 
     const rl = createInterface({ input: c });
-    rl.once('line', line => {
-      clearTimeout(timer);
+    rl.once('line', line => settle(() => {
       c.end();
       try {
         const msg = JSON.parse(line) as { result?: unknown; error?: RpcError };
@@ -56,7 +67,7 @@ export function sendRpc(
       } catch (e) {
         reject(new RpcCallError(`malformed response: ${(e as Error).message}`, socketPath));
       }
-    });
+    }));
     c.write(JSON.stringify({ id: 1, method, params }) + '\n');
   });
 }

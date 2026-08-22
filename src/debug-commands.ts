@@ -42,6 +42,16 @@ export function registerDebugCommands(
       const svcName = await pickService(arg, store, 'Debug which service?');
       if (!svcName) return;
 
+      // Already under the inspector: a service declared `debug: true` in the
+      // config comes up that way, and a watch-triggered restart ends the
+      // session while leaving the service debugged on a new port. Restarting
+      // it again would throw away the state the user is here to look at.
+      const live = store.getAll().find(s => s.name === svcName);
+      if (typeof live?.debugPort === 'number') {
+        await attach(svcName, live.debugPort, live.cwd, workspaceRoot(), folder());
+        return;
+      }
+
       const result = await withProgress(`devup: restarting "${svcName}" under the inspector…`, async () => {
         // Not pre-checked against `cmd`: the daemon decides what it can
         // inspect, and its refusal ("does not run node") is the better message.
@@ -69,15 +79,16 @@ export function registerDebugCommands(
       }
 
       const svc = store.getAll().find(s => s.name === svcName);
-      const cwd = resolveServiceCwd(svc?.cwd, workspaceRoot()) ?? workspaceRoot();
-      const started = await vscode.debug.startDebugging(folder(), buildAttachConfig(svcName, port, cwd));
-      if (!started) {
-        void vscode.window.showErrorMessage(`devup: could not attach to "${svcName}" on port ${port}.`);
-      }
+      await attach(svcName, port, svc?.cwd, workspaceRoot(), folder());
     }),
 
     vscode.commands.registerCommand('devup.stopDebugging', async (arg?: string | Record<string, unknown>) => {
-      const svcName = await pickService(arg, store, 'Stop debugging which service?', true);
+      // Every service, not only those reporting a port. The daemon nulls
+      // `debugPort` whenever the process is not running and never publishes the
+      // `debug` flag itself, so a debugged service that is stopped or crashed
+      // looks identical to one that was never debugged — while the flag is
+      // still set, and every restart brings `--inspect` back with it.
+      const svcName = await pickService(arg, store, 'Stop debugging which service?');
       if (!svcName) return;
 
       const result = await withProgress(`devup: restarting "${svcName}" without the inspector…`, async () => {
@@ -141,19 +152,30 @@ function waitForDebugPort(store: StatusStore, svcName: string): Promise<number |
   });
 }
 
+async function attach(
+  svcName: string,
+  port: number,
+  svcCwd: string | undefined,
+  workspaceRoot: string,
+  folder: vscode.WorkspaceFolder,
+): Promise<void> {
+  const cwd = resolveServiceCwd(svcCwd, workspaceRoot) ?? workspaceRoot;
+  const started = await vscode.debug.startDebugging(folder, buildAttachConfig(svcName, port, cwd));
+  if (!started) {
+    void vscode.window.showErrorMessage(`devup: could not attach to "${svcName}" on port ${port}.`);
+  }
+}
+
 async function pickService(
   arg: string | Record<string, unknown> | undefined,
   store: StatusStore,
   prompt: string,
-  debuggingOnly = false,
 ): Promise<string | null> {
   const name = extractSvcName(arg);
   if (name) return name;
-  const all = store.getAll().filter(s => !debuggingOnly || typeof s.debugPort === 'number');
+  const all = store.getAll();
   if (!all.length) {
-    void vscode.window.showInformationMessage(
-      debuggingOnly ? 'devup: no service is running under the inspector.' : 'devup: no services available.',
-    );
+    void vscode.window.showInformationMessage('devup: no services available.');
     return null;
   }
   const picked = await vscode.window.showQuickPick(

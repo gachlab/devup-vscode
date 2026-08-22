@@ -59,3 +59,12 @@ describe('resolveServiceCwd', () => {
     assert.equal(resolveServiceCwd('   ', '/w'), null);
   });
 });
+
+describe('the port the config is built from', () => {
+  it('is whatever was reported, not a fixed one', () => {
+    // devup uses --inspect=0 and reads the port back from Node's banner, so
+    // 9229 is never a safe assumption.
+    assert.equal(buildAttachConfig('a', 40001, '/w').port, 40001);
+    assert.equal(buildAttachConfig('a', 33333, '/w').port, 33333);
+  });
+});
