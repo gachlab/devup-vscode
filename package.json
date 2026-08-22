@@ -117,6 +117,11 @@
           "default": 1024,
           "description": "Memory (MB) threshold for red (critical) icon on service tree items."
         },
+        "devup.logDir": {
+          "type": "string",
+          "default": "",
+          "description": "Root of devup's log directory, when the daemon was started with --log-dir. Empty = ~/.devup/logs. The daemon does not publish this over the control plane, so it has to be repeated here for 'Open log file' to find anything."
+        },
         "devup.notifications.configReload": {
           "type": "boolean",
           "default": true,
@@ -230,6 +235,26 @@
         "icon": "$(terminal)"
       },
       {
+        "command": "devup.copyUrl",
+        "title": "devup: Copy service URL",
+        "icon": "$(clippy)"
+      },
+      {
+        "command": "devup.openLogFile",
+        "title": "devup: Open log file",
+        "icon": "$(file)"
+      },
+      {
+        "command": "devup.revealLogs",
+        "title": "devup: Reveal logs folder",
+        "icon": "$(folder-opened)"
+      },
+      {
+        "command": "devup.closeForwardedPorts",
+        "title": "devup: Close forwarded ports…",
+        "icon": "$(plug)"
+      },
+      {
         "command": "devup.diagnostics",
         "title": "devup: Show connection details",
         "icon": "$(info)"
@@ -261,6 +286,21 @@
           "command": "devup.daemon.stop",
           "when": "view == devupServices && devup.daemonReachable",
           "group": "navigation@2"
+        },
+        {
+          "command": "devup.revealLogs",
+          "when": "view == devupServices",
+          "group": "1_devup@1"
+        },
+        {
+          "command": "devup.closeForwardedPorts",
+          "when": "view == devupServices && devup.remote",
+          "group": "1_devup@2"
+        },
+        {
+          "command": "devup.diagnostics",
+          "when": "view == devupServices",
+          "group": "1_devup@3"
         }
       ],
       "view/item/context": [
@@ -308,6 +348,16 @@
           "command": "devup.openTerminal",
           "when": "view == devupServices && viewItem =~ /service-/",
           "group": "1_actions@6"
+        },
+        {
+          "command": "devup.copyUrl",
+          "when": "view == devupServices && viewItem =~ /service-/",
+          "group": "2_share@1"
+        },
+        {
+          "command": "devup.openLogFile",
+          "when": "view == devupServices && viewItem =~ /service-/",
+          "group": "2_share@2"
         }
       ]
     }

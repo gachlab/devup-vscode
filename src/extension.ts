@@ -62,6 +62,9 @@ export function activate(context: vscode.ExtensionContext): void {
   portForwarder.start();
   context.subscriptions.push(portForwarder);
 
+  // Menus branch on this: the port commands are meaningless locally.
+  void vscode.commands.executeCommand('setContext', 'devup.remote', !!vscode.env.remoteName);
+
   // Live log streaming per service.
   const activeLogChannels = new LogChannels(socketPath);
   context.subscriptions.push(activeLogChannels);
@@ -71,7 +74,7 @@ export function activate(context: vscode.ExtensionContext): void {
   context.subscriptions.push(activeStatusBar);
 
   // Sidebar tree view — also derives from the store.
-  const tree = new ServicesTreeProvider(activeStore);
+  const tree = new ServicesTreeProvider(activeStore, portForwarder);
   const treeView = vscode.window.createTreeView('devupServices', { treeDataProvider: tree });
   context.subscriptions.push(treeView, tree);
 
@@ -105,7 +108,11 @@ export function activate(context: vscode.ExtensionContext): void {
   updateContext();
 
   // Per-service commands (tailLogs / restart / stop / openInBrowser / refresh).
-  registerServiceCommands(context, activeStore, activeLogChannels, socketPath, folderPath);
+  // The daemon's own name for the project is authoritative — it is what it
+  // sanitises into the log directory. Discovery's is the fallback for when
+  // `info` has not answered yet.
+  const projectName = () => activeStore.getInfo().project || discovery.projectName;
+  registerServiceCommands(context, activeStore, activeLogChannels, socketPath, folderPath, projectName);
 
   // Service detail webview panels.
   const activeDetailPanels = new ServiceDetailPanels(activeStore, socketPath);

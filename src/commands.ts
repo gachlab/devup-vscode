@@ -1,5 +1,7 @@
+import { existsSync } from 'node:fs';
 import * as vscode from 'vscode';
 import { sendRpc, RpcCallError } from './socket-client.js';
+import { logDirFor, logFileFor } from './log-paths.js';
 import type { StatusStore, ServiceSnapshot } from './status-store.js';
 import { buildServiceUrl } from './url-builder.js';
 import { canonicalPort } from './forward-logic.js';
@@ -30,6 +32,7 @@ export function registerServiceCommands(
   logChannels: LogChannels,
   socketPath: () => string,
   workspaceRoot: () => string,
+  projectName: () => string,
 ): void {
   context.subscriptions.push(
     vscode.commands.registerCommand('devup.tailLogs', async (arg?: ServiceArg) => {
@@ -99,6 +102,67 @@ export function registerServiceCommands(
       term.show();
     }),
 
+    vscode.commands.registerCommand('devup.copyUrl', async (arg?: ServiceArg) => {
+      const svc = await resolveServiceName(arg, store, 'Copy the URL of which service?');
+      if (!svc) return;
+      const info = store.getAll().find(s => s.name === svc);
+      if (!info) { void vscode.window.showWarningMessage(`devup: "${svc}" not found.`); return; }
+      // Same URL `Open in browser` uses, proxy route and all — the one thing
+      // most often wanted and, until now, unavailable at any speed (issue #44).
+      const url = buildServiceUrl(svc, canonicalPort(info), store.getProxy());
+      await vscode.env.clipboard.writeText(url);
+      void vscode.window.showInformationMessage(`devup: copied ${url}`);
+    }),
+
+    vscode.commands.registerCommand('devup.openLogFile', async (arg?: ServiceArg) => {
+      const svc = await resolveServiceName(arg, store, 'Open the log file of which service?');
+      if (!svc) return;
+      const file = logFileFor(projectName(), svc, logDirOverride());
+      if (!existsSync(file)) {
+        // Rotated per launch, so "not yet" is a normal state rather than an
+        // error — and the path is what someone needs in order to check.
+        void vscode.window.showWarningMessage(`devup: no log file for "${svc}" yet.\n${file}`);
+        return;
+      }
+      const doc = await vscode.workspace.openTextDocument(vscode.Uri.file(file));
+      await vscode.window.showTextDocument(doc, { preview: false });
+    }),
+
+    vscode.commands.registerCommand('devup.revealLogs', async () => {
+      const dir = logDirFor(projectName(), logDirOverride());
+      if (!existsSync(dir)) {
+        void vscode.window.showWarningMessage(`devup: no logs folder yet.\n${dir}`);
+        return;
+      }
+      if (vscode.env.remoteName) {
+        // The logs are on the remote host, where the daemon runs, and
+        // `revealFileInOS` would open a file manager on the local machine —
+        // pointed at a path that does not exist there.
+        const choice = await vscode.window.showInformationMessage(
+          `devup: logs are on the remote host at ${dir}`, 'Copy path',
+        );
+        if (choice) await vscode.env.clipboard.writeText(dir);
+        return;
+      }
+      await vscode.commands.executeCommand('revealFileInOS', vscode.Uri.file(dir));
+    }),
+
+    vscode.commands.registerCommand('devup.closeForwardedPorts', async () => {
+      if (!vscode.env.remoteName) {
+        void vscode.window.showInformationMessage('devup: nothing is forwarded — this is a local window.');
+        return;
+      }
+      // The editor owns tunnel lifetime and exposes no API to close one. Its
+      // own picker is the closest thing, and it at least removes the hunt.
+      try {
+        await vscode.commands.executeCommand('remote.tunnel.closeCommandPalette');
+      } catch {
+        void vscode.window.showWarningMessage(
+          'devup: this editor does not offer a close-port picker. Close them from the Ports view.',
+        );
+      }
+    }),
+
     vscode.commands.registerCommand('devup.refresh', () => {
       // Reconnecting is autonomous, but it backs off to 30 s while the daemon
       // stays down — so someone who has just started one should not have to
@@ -107,6 +171,12 @@ export function registerServiceCommands(
       store.refresh();
     }),
   );
+}
+
+/** `devup --log-dir` moves the root and the daemon does not publish where to,
+ *  so anyone using it has to say so here. */
+function logDirOverride(): string | undefined {
+  return vscode.workspace.getConfiguration('devup').get<string>('logDir')?.trim() || undefined;
 }
 
 function rpcMessage(e: unknown): string {

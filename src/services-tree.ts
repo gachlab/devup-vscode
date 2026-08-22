@@ -1,6 +1,7 @@
 import * as vscode from 'vscode';
 import type { StatusStore, ServiceSnapshot } from './status-store.js';
-import { formatCpu, formatMem } from './url-builder.js';
+import { buildServiceUrl, describeProxy, formatCpu, formatMem, proxyRouteFor } from './url-builder.js';
+import type { PortForwarder } from './port-forward.js';
 import { buildPhaseGroups } from './tree-logic.js';
 import { canonicalPort } from './forward-logic.js';
 export { buildPhaseGroups };
@@ -8,6 +9,7 @@ export { buildPhaseGroups };
 type Node =
   | { kind: 'group'; label: string; services: ServiceSnapshot[] }
   | { kind: 'service'; svc: ServiceSnapshot }
+  | { kind: 'proxy'; label: string }
   | { kind: 'empty'; message: string };
 
 /** Tree-view provider for the `devup` view container. Supports three grouping
@@ -19,8 +21,11 @@ export class ServicesTreeProvider implements vscode.TreeDataProvider<Node> {
   private readonly storeSub: vscode.Disposable;
   private readonly configSub: vscode.Disposable;
 
-  constructor(private readonly store: StatusStore) {
+  private readonly forwardSub: vscode.Disposable | null;
+
+  constructor(private readonly store: StatusStore, private readonly forwarder?: PortForwarder) {
     this.storeSub = store.onDidChange(() => this._onDidChangeTreeData.fire());
+    this.forwardSub = forwarder?.onDidChangeForwarded(() => this._onDidChangeTreeData.fire()) ?? null;
     this.configSub = vscode.workspace.onDidChangeConfiguration(e => {
       if (e.affectsConfiguration('devup.treeView.groupBy') || e.affectsConfiguration('devup.profile')) {
         this._onDidChangeTreeData.fire();
@@ -40,18 +45,24 @@ export class ServicesTreeProvider implements vscode.TreeDataProvider<Node> {
         const profileServices = this.store.getInfo().profiles[activeProfile] ?? [];
         services = services.filter(s => profileServices.includes(s.name));
       }
-      if (!services.length) return [{ kind: 'empty', message: 'No services registered' }];
+      // The proxy is in the store already and was never shown, though with it
+      // on, a service is reachable at <sub>.<domain> and the tree still says
+      // `:3002` (issue #44).
+      const proxyLabel = describeProxy(this.store.getProxy());
+      const header: Node[] = proxyLabel ? [{ kind: 'proxy', label: proxyLabel }] : [];
+
+      if (!services.length) return [...header, { kind: 'empty', message: 'No services registered' }];
 
       if (groupBy === 'none') {
-        return services.slice().sort(byName).map(svc => ({ kind: 'service', svc }));
+        return [...header, ...services.slice().sort(byName).map(svc => ({ kind: 'service' as const, svc }))];
       }
       if (groupBy === 'phase') {
-        return buildPhaseGroups(services);
+        return [...header, ...buildPhaseGroups(services)];
       }
       // default: 'type'
       const apis = services.filter(s => s.type === 'api').sort(byName);
       const webs = services.filter(s => s.type === 'web').sort(byName);
-      const groups: Node[] = [];
+      const groups: Node[] = [...header];
       if (apis.length) groups.push({ kind: 'group', label: 'APIs', services: apis });
       if (webs.length) groups.push({ kind: 'group', label: 'Webs', services: webs });
       return groups;
@@ -63,6 +74,13 @@ export class ServicesTreeProvider implements vscode.TreeDataProvider<Node> {
   }
 
   getTreeItem(node: Node): vscode.TreeItem {
+    if (node.kind === 'proxy') {
+      const item = new vscode.TreeItem(node.label, vscode.TreeItemCollapsibleState.None);
+      item.iconPath = new vscode.ThemeIcon('globe');
+      item.contextValue = 'proxy';
+      item.tooltip = 'devup reverse proxy. Services with a route are reachable at their subdomain; the rest only on their port.';
+      return item;
+    }
     if (node.kind === 'empty') {
       const item = new vscode.TreeItem(node.message, vscode.TreeItemCollapsibleState.None);
       item.iconPath = new vscode.ThemeIcon('info');
@@ -77,11 +95,12 @@ export class ServicesTreeProvider implements vscode.TreeDataProvider<Node> {
       item.contextValue = 'group';
       return item;
     }
-    return serviceItem(node.svc, this.store);
+    return serviceItem(node.svc, this.store, this.forwarder);
   }
 
   dispose(): void {
     this.storeSub.dispose();
+    this.forwardSub?.dispose();
     this.configSub.dispose();
     this._onDidChangeTreeData.dispose();
   }
@@ -98,15 +117,16 @@ function byName(a: ServiceSnapshot, b: ServiceSnapshot): number {
   return a.name.localeCompare(b.name);
 }
 
-function serviceItem(svc: ServiceSnapshot, store: StatusStore): vscode.TreeItem {
+function serviceItem(svc: ServiceSnapshot, store: StatusStore, forwarder?: PortForwarder): vscode.TreeItem {
   const item = new vscode.TreeItem(svc.name, vscode.TreeItemCollapsibleState.None);
   const stats = store.getServiceStats(svc.name);
   const statsStr = stats ? `  · ${formatCpu(stats.cpu)} · ${formatMem(stats.memMB)}` : '';
-  item.description = `:${canonicalPort(svc)}  ${svc.status}/${svc.health}${statsStr}`;
+  const forwarded = forwarder?.isForwarded(canonicalPort(svc)) ? '  $(radio-tower)' : '';
+  item.description = `:${canonicalPort(svc)}  ${svc.status}/${svc.health}${statsStr}${forwarded}`;
   item.iconPath = stats ? resourceIcon(svc, stats) : healthIcon(svc);
   item.contextValue = `service-${svc.type}`;
   item.command = { command: 'devup.tailLogs', title: 'Tail logs', arguments: [svc.name] };
-  item.tooltip = buildTooltip(svc, stats);
+  item.tooltip = buildTooltip(svc, stats, store, !!forwarded);
   return item;
 }
 
@@ -134,7 +154,12 @@ function healthIcon(svc: ServiceSnapshot): vscode.ThemeIcon {
   return new vscode.ThemeIcon('circle-large-outline');
 }
 
-function buildTooltip(svc: ServiceSnapshot, stats: import('./status-store.js').ServiceStats | null): vscode.MarkdownString {
+function buildTooltip(
+  svc: ServiceSnapshot,
+  stats: import('./status-store.js').ServiceStats | null,
+  store: StatusStore,
+  forwarded: boolean,
+): vscode.MarkdownString {
   const md = new vscode.MarkdownString();
   md.appendMarkdown(`**${svc.name}**\n\n`);
   md.appendMarkdown(`- port: ${canonicalPort(svc)}\n`);
@@ -147,6 +172,17 @@ function buildTooltip(svc: ServiceSnapshot, stats: import('./status-store.js').S
   if (svc.pid != null) md.appendMarkdown(`- pid: ${svc.pid}\n`);
   if (svc.errors)    md.appendMarkdown(`- errors: ${svc.errors}\n`);
   if (svc.restarts)  md.appendMarkdown(`- restarts: ${svc.restarts}\n`);
+  const proxy = store.getProxy();
+  if (proxy?.active) {
+    const route = proxyRouteFor(svc.name, proxy);
+    // "no route" is worth saying: without it, a service the proxy does not
+    // know about looks exactly like one it does.
+    md.appendMarkdown(route ? `- proxy route: ${route}\n` : '- proxy route: none — reachable on its port only\n');
+  }
+  if (forwarded) {
+    md.appendMarkdown('- port forwarding requested — the Ports view has the address\n');
+  }
+  md.appendMarkdown(`- url: ${buildServiceUrl(svc.name, canonicalPort(svc), proxy)}\n`);
   if (svc.crashLog?.length) {
     md.appendMarkdown(`\n**Last crash:**\n\`\`\`\n${svc.crashLog.slice(-5).join('\n')}\n\`\`\``);
   }

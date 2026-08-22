@@ -118,3 +118,22 @@ function hasMemory(sys: SystemStats): boolean {
 function isFiniteNumber(v: unknown): v is number {
   return typeof v === 'number' && Number.isFinite(v);
 }
+
+/** The route a service is reachable on through the proxy, or null when it has
+ *  none — which the sidebar used to render identically to having one. Empty
+ *  string is a real value: it means the domain root. */
+export function proxyRouteFor(name: string, proxy: ProxyInfo | null): string | null {
+  if (!proxy?.active) return null;
+  const sub = proxy.routes[name];
+  if (sub === undefined) return null;
+  return sub ? `${sub}.${proxy.domain}` : proxy.domain;
+}
+
+/** One line describing the running proxy, for the tree root. */
+export function describeProxy(proxy: ProxyInfo | null): string | null {
+  if (!proxy) return null;
+  const parts = [proxy.provider || 'proxy', proxy.domain].filter(Boolean);
+  parts.push(proxy.tls ? 'TLS' : 'no TLS');
+  if (!proxy.active) parts.push('inactive');
+  return parts.join(" \u00b7 ");
+}
