@@ -8,6 +8,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **`devup: Debug service`** (#43) — the single biggest thing missing. Debugging a service used to mean stopping it in devup, running it by hand outside, and giving up watch, health checks and restarts while you did. The extension asks the daemon to restart the service under `--inspect` (new in devup 0.14.0, gachlab/devup#84), waits for Node to announce the port, and attaches, with source maps rooted at the service's own directory. **`devup: Stop debugging service`** puts it back — worth knowing that the flag lives on the service in the daemon, so it survives the crash-and-restart that usually prompts a debugging session, and outlives the editor session too.
+
+  The port is not stable: devup starts the service with `--inspect=0`, so the OS picks it and it differs on every restart. The attach configuration therefore does *not* ask the debug adapter to reattach — it would reconnect to a port that died with the previous process — and the tree shows the current one next to the service.
 - **The proxy is finally visible** (#44). The extension has held a full `ProxyInfo` — provider, domain, TLS, and the per-service routes — since 0.4.0 and showed none of it, so with the proxy on, a service reachable at `https://admin.guesthub.test` was listed as `:3005` with nothing to say the domain existed. The tree now has a proxy row at the top, each service's tooltip carries its route, and **a service with no route says so** rather than being silently indistinguishable from one that has it. New **`devup: Copy service URL`** on the service context menu — the same proxy-aware URL "Open in browser" uses, and the action most often wanted.
 - **`devup: Open log file`** (#45) opens `~/.devup/logs/<project>/<svc>.log` as an ordinary editor document, with the full history the 200-line output-channel tail cannot show — the previous run included. **`devup: Reveal logs folder`** sits on the view title; in a remote window it offers the path instead of opening a file manager on the wrong machine. Add `devup.logDir` if your daemon runs with `--log-dir`, which it does not publish over the control plane.
 - **Forwarded ports are marked in the tree**, and **`devup: Close forwarded ports…`** opens the editor's own picker (#42). When the daemon goes away with tunnels still open, the extension now says so instead of leaving them to be discovered by a request that hangs: the local ports stay bound against a remote side with nothing listening, which looks like a slow service rather than a dead one. There is no API to close a tunnel — `asExternalUri`'s own docs say the editor owns their lifetime — so the picker is as far as this goes, and the Ports view remains the source of truth for the address. Using it also pauses forwarding until the daemon next connects: the editor does not report which ports the user closed, so the 30-second re-assert would otherwise re-open every one of them.
@@ -29,10 +32,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Internal
 - New vscode-free modules `src/stats-cache.ts` (stats comparison) and `src/backoff.ts`, plus `formatSystemStats` / `formatSystemTooltip` / `systemStatsKey` in `src/url-builder.ts`.
+- New vscode-free module `src/debug-config.ts` (the attach configuration and the service-cwd rule, now shared with "Open terminal").
 - New vscode-free module `src/log-paths.ts`, checked against devup's log-path rule name by name — which is *not* the socket-path rule: `LogSink` trims leading underscores where `defaultSocketPath` keeps them, so one project genuinely has `logs/gachlab_web/` and `sock-_gachlab_web.sock`.
 - New vscode-free module `src/service-map.ts` — applying one stream frame to the service map, including the entries it must refuse.
 - New vscode-free modules `src/config-file.ts` (the config scanner, tested against real files on disk), `src/socket-path.ts` (checked against devup's own rule name by name) and `src/diagnosis.ts` (which of the four situations we are in, and the text for it). `StatusStore` owns its socket path and re-connects through `setSocketPath()`; `LogChannels` and `ServiceDetailPanels` take a `() => string` and expose `retarget()`, so nothing captures a path a rename can invalidate.
-- 128 new unit tests, each verified by mutation.
+- 137 new unit tests, each verified by mutation.
 
 ## [0.7.0] — 2026-08-21
 

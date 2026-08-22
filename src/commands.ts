@@ -2,6 +2,7 @@ import { existsSync } from 'node:fs';
 import * as vscode from 'vscode';
 import { sendRpc, RpcCallError } from './socket-client.js';
 import { logDirFor, logFileFor } from './log-paths.js';
+import { resolveServiceCwd } from './debug-config.js';
 import type { StatusStore, ServiceSnapshot } from './status-store.js';
 import { buildServiceUrl } from './url-builder.js';
 import { canonicalPort } from './forward-logic.js';
@@ -96,10 +97,8 @@ export function registerServiceCommands(
       })();
       if (!svcName) return;
       const svc = store.getAll().find(s => s.name === svcName);
-      if (!svc?.cwd) { void vscode.window.showWarningMessage(`devup: cwd not available for "${svcName}"`); return; }
-      // The devup folder, which in a multi-root workspace is not necessarily
-      // the first one — service cwds are relative to the config's folder.
-      const fullCwd = svc.cwd.startsWith('/') ? svc.cwd : `${workspaceRoot()}/${svc.cwd}`;
+      const fullCwd = resolveServiceCwd(svc?.cwd, workspaceRoot());
+      if (!fullCwd) { void vscode.window.showWarningMessage(`devup: cwd not available for "${svcName}"`); return; }
       const term = vscode.window.createTerminal({ name: `devup: ${svcName}`, cwd: fullCwd });
       term.show();
     }),

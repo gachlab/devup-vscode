@@ -8,6 +8,7 @@ import { StatusStore } from './status-store.js';
 import { ServicesTreeProvider } from './services-tree.js';
 import { registerServiceCommands } from './commands.js';
 import { registerDaemonCommands } from './daemon-commands.js';
+import { registerDebugCommands } from './debug-commands.js';
 import { ServiceDetailPanels } from './service-detail.js';
 import { ProfilePicker } from './profile-picker.js';
 import { PortForwarder } from './port-forward.js';
@@ -185,6 +186,9 @@ export function activate(context: vscode.ExtensionContext): void {
 
   // Daemon-level commands (start / stop / restart).
   registerDaemonCommands(context, folderPath, activeStore);
+
+  // Attach a debugger to a service (needs devup >= 0.14.0).
+  registerDebugCommands(context, activeStore, socketPath, folderPath, () => discovery.folder);
 
   // ── Re-discovery ─────────────────────────────────────────────────────────
   // Discovery used to run once, at activation, so renaming a project moved its

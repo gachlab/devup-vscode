@@ -18,6 +18,14 @@ export interface ServiceSnapshot {
   errors: number;
   restarts: number;
   crashLog?: string[] | null;
+  /** When the current process started, or null when it is not running.
+   *  Present from @gachlab/devup >= 0.14.0. */
+  startedAt?: number | null;
+  /** The port Node's inspector bound to, once it has announced it — devup
+   *  starts a debugged service with `--inspect=0`, so the OS picks it and it
+   *  differs on every restart. Null when the service is not being debugged, and
+   *  briefly while it is starting. Present from @gachlab/devup >= 0.14.0. */
+  debugPort?: number | null;
 }
 
 export interface ProjectInfo {

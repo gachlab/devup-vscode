@@ -29,6 +29,8 @@ suite('Extension Integration', () => {
       'devup.openLogFile',
       'devup.revealLogs',
       'devup.closeForwardedPorts',
+      'devup.debugService',
+      'devup.stopDebugging',
     ];
     for (const cmd of expected) {
       assert.ok(devupCmds.includes(cmd), `command ${cmd} should be registered`);
