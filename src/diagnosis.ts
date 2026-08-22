@@ -11,6 +11,11 @@
  *  this function's four cases the same value means they cannot drift. */
 export type Diagnosis =
   | 'connected'
+  /** A connect is in flight and has not resolved yet. Nothing is wrong, so
+   *  the welcome view has no clause for it and holds whatever it was showing.
+   *  Without this the state during the 2 s probe — and during every backoff
+   *  attempt — read as `noAnswer`, offering to restart a daemon that is fine. */
+  | 'connecting'
   /** No workspace folder at all — set by `activate()` before discovery can
    *  run, never returned by `diagnose()`. Listed here because the type is the
    *  contract for the `devup.diagnosis` context key, and an unset key matches
@@ -28,7 +33,9 @@ export type Diagnosis =
   | 'noAnswer';
 
 export interface DiagnosisInput {
-  connected: boolean;
+  /** The store's own tri-state, not a boolean: `connecting` is neither
+   *  success nor failure and must not be diagnosed as one. */
+  state: 'connecting' | 'connected' | 'unreachable';
   /** The config file the name was read from, null when there is none. */
   configFile: string | null;
   /** How the socket path was decided. */
@@ -37,15 +44,18 @@ export interface DiagnosisInput {
 }
 
 export function diagnose(input: DiagnosisInput): Diagnosis {
-  if (input.connected) return 'connected';
+  if (input.state === 'connected') return 'connected';
   // An explicit setting is the user's own answer to "which daemon?" — a
   // missing config file is not a problem in that case, and saying so would
   // send them to fix something they deliberately bypassed.
   const overridden = input.source === 'socketPath setting' || input.source === 'projectName setting';
   if (!overridden) {
+    // These two hold whether or not a connection is in flight — they are
+    // properties of the workspace, not of the daemon.
     if (!input.configFile) return 'noConfig';
     if (input.source === 'fallback') return 'guessedName';
   }
+  if (input.state === 'connecting') return 'connecting';
   return input.socketExists ? 'noAnswer' : 'socketMissing';
 }
 
@@ -73,8 +83,9 @@ export function describeDiagnosis(d: Diagnosis, detail: DiagnosisDetail): string
 
 const EXPLANATION: Record<Diagnosis, string> = {
   connected: 'The daemon is connected.',
+  connecting: 'Connecting…',
   noWorkspace: 'No folder is open, so there is nothing to discover. Open the folder that holds your devup config.',
-  noConfig: 'No devup.config.{ts,js,mjs,json} was found, so there is no project name to resolve a socket from. Open a folder that has one, or set devup.socketPath.',
+  noConfig: 'No devup.config.{ts,js,json} was found, so there is no project name to resolve a socket from. Open a folder that has one, or set devup.socketPath.',
   guessedName: 'The project name could not be read from the config file, so it fell back to the workspace folder name. That will only match a daemon by coincidence — set devup.projectName to the name in your config.',
   socketMissing: 'Nothing is listening at that path, which is what it looks like when the daemon is not running. Start it with devup up -d.',
   noAnswer: 'The socket file exists but the daemon did not answer. It may still be starting, may be wedged, or the file may be left over from a crash — restarting the daemon clears all three.',

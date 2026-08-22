@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { diagnose, describeDiagnosis, type DiagnosisInput } from '../../src/diagnosis.js';
 
 const base: DiagnosisInput = {
-  connected: false,
+  state: 'unreachable',
   configFile: '/w/devup.config.ts',
   source: 'config file',
   socketExists: false,
@@ -11,9 +11,21 @@ const base: DiagnosisInput = {
 
 describe('diagnose', () => {
   it('says connected when it is', () => {
-    assert.equal(diagnose({ ...base, connected: true }), 'connected');
+    assert.equal(diagnose({ ...base, state: 'connected' }), 'connected');
     // Even with everything else looking wrong: a live connection is the answer.
-    assert.equal(diagnose({ ...base, connected: true, configFile: null, source: 'fallback' }), 'connected');
+    assert.equal(diagnose({ ...base, state: 'connected', configFile: null, source: 'fallback' }), 'connected');
+  });
+
+  it('does not call a connection in progress a failure', () => {
+    // The state is `connecting` for the 2 s probe and on every backoff attempt.
+    // Diagnosing that as noAnswer offered to restart a perfectly good daemon.
+    assert.equal(diagnose({ ...base, state: 'connecting', socketExists: true }), 'connecting');
+    assert.equal(diagnose({ ...base, state: 'connecting', socketExists: false }), 'connecting');
+  });
+
+  it('still reports a workspace problem while connecting, since it is one either way', () => {
+    assert.equal(diagnose({ ...base, state: 'connecting', configFile: null, source: 'fallback' }), 'noConfig');
+    assert.equal(diagnose({ ...base, state: 'connecting', source: 'fallback' }), 'guessedName');
   });
 
   it('distinguishes a missing daemon from a wedged one', () => {
@@ -80,7 +92,7 @@ describe('describeDiagnosis', () => {
   });
 
   it('carries an explanation for every case', () => {
-    for (const d of ['connected', 'noConfig', 'guessedName', 'socketMissing', 'noAnswer'] as const) {
+    for (const d of ['connected', 'connecting', 'noWorkspace', 'noConfig', 'guessedName', 'socketMissing', 'noAnswer'] as const) {
       const text = describeDiagnosis(d, detail);
       // Four header lines, a blank, then the explanation.
       assert.ok(text.split('\n').slice(5).join('').trim().length > 0, `no explanation for ${d}`);

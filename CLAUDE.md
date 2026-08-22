@@ -24,6 +24,21 @@ deliberately, so the extension stays independent of the package. Nothing
 checks the two agree (gachlab/devup#87). devup's `serializeState()` is the
 source of truth — read it, not the docs, which have been wrong.
 
+Three more mirrors, all of which have drifted at least once:
+
+- `src/socket-path.ts` ↔ devup's `defaultSocketPath`. The extension used to
+  strip leading underscores, so `@gachlab/web` resolved to
+  `sock-gachlab_web.sock` while the daemon listened on `sock-_gachlab_web.sock`.
+- `CONFIG_FILES` in `src/config-file.ts` ↔ devup's `CONFIG_NAMES`
+  (`src/config/loader.ts`) — **same names, same order**. Both take the first
+  that exists, so a repo with a `.ts` and a `.json` runs under one name and
+  gets looked for under the other if the orders disagree. `.mjs` is not in the
+  list because devup does not load it.
+- `activationEvents` in `package.json` ↔ that same list.
+
+Every one of these fails the same way: the sidebar insists nothing is running
+while the daemon is up.
+
 ## 3. `asExternalUri` has two rules, both easy to break
 
 - **Do not pair it with `openExternal`.** The API docs: *"uris passed through

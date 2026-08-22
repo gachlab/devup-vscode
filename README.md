@@ -37,7 +37,7 @@ Talks to a running devup daemon via its Unix-socket control plane — no separat
 
 ## How it works
 
-1. The extension activates when your workspace contains `devup.config.{ts,js,mjs,json}`.
+1. The extension activates when your workspace contains `devup.config.{ts,js,json}` — the same three names, in the same order, that the devup CLI itself loads.
 2. It resolves the project `name` from that file — the top-level one, wherever it sits in the object — and connects to `~/.devup/sock-<name>.sock`. In a multi-root workspace it uses the folder that actually has a config. If the name cannot be read, the sidebar says so and offers to set `devup.projectName`, rather than reporting a generic "not running".
 3. It opens a persistent `status.follow` stream — service state updates arrive in real time with no polling.
 4. When the daemon goes down, the extension shows a welcome view and reconnects on its own — after 3 s, then doubling to at most 30 s while it stays down. `devup: Refresh services` retries immediately if you do not want to wait for the next attempt.

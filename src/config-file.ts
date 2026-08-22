@@ -9,9 +9,17 @@
 import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
-/** Config file names, in the order they are consulted. JSON first: it parses
- *  exactly, where .ts/.js can only be scanned. */
-export const CONFIG_FILES = ['devup.config.json', 'devup.config.ts', 'devup.config.js', 'devup.config.mjs'] as const;
+/** Config file names, in the order they are consulted — the same list and the
+ *  same order as devup's own loader (`src/config/loader.ts`), which takes the
+ *  first that exists.
+ *
+ *  Not a detail: a repo carrying both a `.ts` and a `.json` config with
+ *  different names would otherwise have the daemon running under one and the
+ *  extension resolving the other, and the sidebar reporting a socket that
+ *  never existed. `.mjs` is deliberately absent for the same reason — devup
+ *  does not load it, so advertising it here would activate the extension for a
+ *  project the CLI refuses to start. */
+export const CONFIG_FILES = ['devup.config.ts', 'devup.config.js', 'devup.config.json'] as const;
 
 /** The devup config file in `dir`, or null when there is none. */
 export function findConfigFile(dir: string): string | null {

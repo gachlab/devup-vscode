@@ -21,6 +21,8 @@ export class StatusStore implements vscode.Disposable {
   private fastRetryUntil = 0;
   /** A socket path change that arrived while a connect was in flight. */
   private pendingRestart = false;
+  /** The path the live connection was established against. */
+  private statsPath = '';
   private subscription: Subscription | null = null;
   private reconnectTimer: NodeJS.Timeout | null = null;
   private statsTimer: NodeJS.Timeout | null = null;
@@ -99,6 +101,11 @@ export class StatusStore implements vscode.Disposable {
     this.backoff.reset();
     this.services.clear();
     this.proxy = null;
+    // Also the project info: `info` is allowed to fail, and doConnect only
+    // assigns when it succeeds — so a new project whose info call fails would
+    // otherwise inherit the previous project's profiles, and a tree filtered
+    // by `devup.profile` would render empty against a connected daemon.
+    this.info = { project: '', profiles: {} };
     this.state = 'connecting';
     this.emitter.fire();
     void this.connect();
@@ -137,7 +144,7 @@ export class StatusStore implements vscode.Disposable {
       this.state = 'connected';
       // Before the event, not after: this drops stats left over from the
       // previous connection, and firing first would render them once more.
-      this.startStatsPolling();
+      this.startStatsPolling(path);
       this.emitter.fire();
     } catch {
       this.state = 'unreachable';
@@ -194,9 +201,9 @@ export class StatusStore implements vscode.Disposable {
   }
 
   private async pollStats(): Promise<void> {
-    if (this.state !== 'connected') return;
+    if (this.state !== 'connected' || !this.statsPath) return;
     try {
-      const result = await sendRpc(this.socketPath, 'stats', {}, { timeoutMs: 3000 }) as StatsResult;
+      const result = await sendRpc(this.statsPath, 'stats', {}, { timeoutMs: 3000 }) as StatsResult;
       // The stream can drop while this RPC is in flight, in which case the
       // disconnect has already cleared the cache — repopulating it now would
       // leave the status bar showing host memory for a daemon that is gone.
@@ -207,14 +214,18 @@ export class StatusStore implements vscode.Disposable {
     } catch { /* core < 0.10.0 or transient — degrade gracefully */ }
   }
 
-  private startStatsPolling(): void {
+  private startStatsPolling(path: string): void {
     this.stopStatsPolling();
+    // The connection's own path, for the same reason doConnect captures one:
+    // `setSocketPath` may already have moved the field while deferring.
+    this.statsPath = path;
     void this.pollStats();
     this.statsTimer = setInterval(() => void this.pollStats(), 3000);
   }
 
   private stopStatsPolling(): void {
     if (this.statsTimer) { clearInterval(this.statsTimer); this.statsTimer = null; }
+    this.statsPath = '';
     // Callers fire their own event around this, so the return is not needed.
     this.stats.clear();
   }

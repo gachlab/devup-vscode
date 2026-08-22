@@ -149,23 +149,36 @@ describe('findConfigFile and readProjectName', () => {
     assert.deepEqual(readProjectName(p), { name: 'FromTs', file: join(p, 'devup.config.ts') });
   });
 
-  it('prefers JSON, which parses exactly, over a file it can only scan', () => {
+  it('prefers the file the daemon would load, not the one that parses exactly', () => {
+    // devup's loader takes devup.config.ts first (src/config/loader.ts). Were
+    // this the other way round, a repo carrying both would run under one name
+    // and be looked for under the other.
     const p = folder('both');
     writeFileSync(join(p, 'devup.config.json'), JSON.stringify({ name: 'FromJson' }));
     writeFileSync(join(p, 'devup.config.ts'), `export default defineConfig({ name: 'FromTs' })`);
-    assert.equal(readProjectName(p)?.name, 'FromJson');
+    assert.equal(findConfigFile(p), join(p, 'devup.config.ts'));
+    assert.equal(readProjectName(p)?.name, 'FromTs');
+  });
+
+  it('ignores a .mjs config, which devup itself does not load', () => {
+    const p = folder('mjs');
+    writeFileSync(join(p, 'devup.config.mjs'), `export default defineConfig({ name: 'FromMjs' })`);
+    assert.equal(findConfigFile(p), null);
+    assert.equal(readProjectName(p), null);
   });
 
   it('falls through to the next variant when one carries no name', () => {
     const p = folder('fallthrough');
-    writeFileSync(join(p, 'devup.config.json'), JSON.stringify({ services: [] }));
-    writeFileSync(join(p, 'devup.config.ts'), `export default defineConfig({ name: 'FromTs' })`);
-    assert.equal(readProjectName(p)?.name, 'FromTs');
+    writeFileSync(join(p, 'devup.config.ts'), `export default defineConfig({ services: [] })`);
+    writeFileSync(join(p, 'devup.config.json'), JSON.stringify({ name: 'FromJson' }));
+    assert.equal(readProjectName(p)?.name, 'FromJson');
   });
 
   it('does not throw on malformed JSON, and moves on', () => {
     const p = folder('broken-json');
+    writeFileSync(join(p, 'devup.config.js'), `module.exports = { services: [] }`);
     writeFileSync(join(p, 'devup.config.json'), '{ not json at all');
+    assert.equal(readProjectName(p), null);
     writeFileSync(join(p, 'devup.config.js'), `module.exports = { name: 'FromJs' }`);
     assert.equal(readProjectName(p)?.name, 'FromJs');
   });

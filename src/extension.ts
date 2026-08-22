@@ -14,13 +14,24 @@ import { PortForwarder } from './port-forward.js';
 import { canonicalPort } from './forward-logic.js';
 
 /** Every config file discovery consults, as a watcher glob. */
-const CONFIG_GLOB = '**/devup.config.{ts,js,mjs,json}';
+const CONFIG_GLOB = '**/devup.config.{ts,js,json}';
 
-/** A watcher fires on every save, and a save lands on every keystroke under
- *  `files.autoSave: afterDelay`. Renaming `Guesthub` a character at a time
- *  would otherwise resolve — and tear down and reconnect to — a different
- *  socket for `Guest`, `Guesth`, `Guesthu`… */
-const REDISCOVER_DEBOUNCE_MS = 600;
+/** A watcher fires on every save, and under `files.autoSave: afterDelay` a
+ *  save lands mid-word. Renaming `Guesthub` would otherwise resolve — and tear
+ *  down and reconnect to — a socket for `Guest`, `Guesth`, `Guesthu`…
+ *
+ *  Read from the editor's own delay rather than hardcoded: a debounce shorter
+ *  than the autosave interval debounces nothing, since consecutive saves are
+ *  already further apart than the window. */
+const REDISCOVER_DEBOUNCE_FLOOR_MS = 1_500;
+
+function rediscoverDebounceMs(): number {
+  const files = vscode.workspace.getConfiguration('files');
+  const autoSaveDelay = files.get<number>('autoSaveDelay', 1_000);
+  const afterDelay = files.get<string>('autoSave', 'off') === 'afterDelay';
+  const delay = afterDelay && Number.isFinite(autoSaveDelay) ? autoSaveDelay : 0;
+  return Math.max(REDISCOVER_DEBOUNCE_FLOOR_MS, delay + 750);
+}
 
 export function activate(context: vscode.ExtensionContext): void {
   const initial = discoverWorkspace();
@@ -75,7 +86,7 @@ export function activate(context: vscode.ExtensionContext): void {
 
   /** Why the daemon cannot be reached, from what discovery already knows. */
   const currentDiagnosis = (): Diagnosis => diagnose({
-    connected: activeStore.getState() === 'connected',
+    state: activeStore.getState(),
     configFile: discovery.configFile,
     source: discovery.source,
     socketExists: existsSync(discovery.socketPath),
@@ -167,7 +178,7 @@ export function activate(context: vscode.ExtensionContext): void {
   let rediscoverTimer: NodeJS.Timeout | null = null;
   const rediscoverSoon = () => {
     if (rediscoverTimer) clearTimeout(rediscoverTimer);
-    rediscoverTimer = setTimeout(() => { rediscoverTimer = null; rediscover(); }, REDISCOVER_DEBOUNCE_MS);
+    rediscoverTimer = setTimeout(() => { rediscoverTimer = null; rediscover(); }, rediscoverDebounceMs());
   };
 
   const watcher = vscode.workspace.createFileSystemWatcher(CONFIG_GLOB);

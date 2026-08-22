@@ -8,11 +8,21 @@ import type { StatusStore } from './status-store.js';
 
 const TERMINAL_NAME = 'devup';
 
-function getOrCreateTerminal(cwd?: string): vscode.Terminal {
-  // Re-use an existing 'devup' terminal if it's still alive; otherwise create one.
-  const existing = vscode.window.terminals.find(t => t.name === TERMINAL_NAME && t.exitStatus === undefined);
+function getOrCreateTerminal(cwd: string): vscode.Terminal {
+  // Re-use an existing 'devup' terminal if it is still alive *and* was opened
+  // for this folder. Which folder is the devup one can change while the window
+  // is open (a rename, a folder added ahead of it), and sending `devup up -d`
+  // into a terminal still cd'd to the previous one acts on the wrong project.
+  const existing = vscode.window.terminals.find(t =>
+    t.name === TERMINAL_NAME && t.exitStatus === undefined && terminalCwd(t) === cwd);
   if (existing) return existing;
   return vscode.window.createTerminal({ name: TERMINAL_NAME, cwd });
+}
+
+function terminalCwd(terminal: vscode.Terminal): string | undefined {
+  const options = terminal.creationOptions as vscode.TerminalOptions;
+  const cwd = options?.cwd;
+  return typeof cwd === 'string' ? cwd : cwd?.fsPath;
 }
 
 function getDevupCommand(): string {

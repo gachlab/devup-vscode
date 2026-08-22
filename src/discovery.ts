@@ -12,19 +12,11 @@
  *  Nothing here loads the config as a module: a config file is arbitrary code,
  *  and running it to read one string is not a trade worth making. See
  *  `config-file.ts` for how the name is found instead. */
-import { join } from 'node:path';
-import { homedir } from 'node:os';
 import * as vscode from 'vscode';
 import { findConfigFile, readProjectName } from './config-file.js';
+import { defaultSocketPath } from './socket-path.js';
 
-const SAFE = /[^a-zA-Z0-9._-]+/g;
-export function sanitize(name: string): string {
-  return name.replace(SAFE, '_').replace(/^_+|_+$/g, '') || 'devup';
-}
-
-export function defaultSocketPath(projectName: string): string {
-  return join(homedir(), '.devup', `sock-${sanitize(projectName)}.sock`);
-}
+export { defaultSocketPath, sanitize } from './socket-path.js';
 
 export interface DiscoveryResult {
   /** Path to the unix socket we should connect to (whether it exists or not). */
