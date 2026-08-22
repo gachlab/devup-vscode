@@ -213,6 +213,11 @@
     "menus": {
       "view/title": [
         {
+          "command": "devup.refresh",
+          "when": "view == devupServices",
+          "group": "navigation@0"
+        },
+        {
           "command": "devup.daemon.start",
           "when": "view == devupServices && !devup.daemonReachable",
           "group": "navigation@1"

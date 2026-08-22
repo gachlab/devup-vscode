@@ -98,10 +98,11 @@ export function registerServiceCommands(
     }),
 
     vscode.commands.registerCommand('devup.refresh', () => {
-      // Tree-view refresh button. Store updates flow through onDidChange already;
-      // this is a no-op trigger for users to force-feel a refresh after the daemon
-      // restarts (reconnect happens in ≤3 s anyway).
-      // Nothing to do — the store reconnects autonomously.
+      // Reconnecting is autonomous, but it backs off to 30 s while the daemon
+      // stays down — so someone who has just started one should not have to
+      // wait out a delay they cannot see. This retries immediately. Reachable
+      // from the refresh button in the view title and the Command Palette.
+      store.refresh();
     }),
   );
 }

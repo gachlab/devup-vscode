@@ -96,7 +96,15 @@ export function openStream(
     if (closed) return;
     onError?.(new RpcCallError(err.message, socketPath));
   });
-  c.on('close', () => { closed = true; onClose?.(); });
+  c.on('close', () => {
+    // A close we asked for is not a connection loss. Reporting it as one lets
+    // a caller replacing its subscription tear down the replacement: the store
+    // would flip to "unreachable", clear every service and schedule a
+    // reconnect, moments after opening a stream that is working.
+    const deliberate = closed;
+    closed = true;
+    if (!deliberate) onClose?.();
+  });
 
   rl.on('line', (line: string) => {
     try {
