@@ -38,6 +38,7 @@ Talks to a running devup daemon via its Unix-socket control plane — no separat
 | Copy service URL, proxy route included | 0.8.0 |
 | Open a service's log file, and reveal the logs folder | 0.8.0 |
 | Forwarded ports marked in the tree, with a prompt to close them when the daemon goes | 0.8.0 |
+| Attach a debugger to a service, without taking it out of devup (needs devup ≥ 0.14.0) | 0.8.0 |
 | Resolves local `node_modules` devup before global install | 0.2.1 |
 
 ## How it works
@@ -63,7 +64,7 @@ All data (service status, health, phase, profiles) comes exclusively from the da
 ## Requirements
 
 - VS Code ≥ 1.85
-- [@gachlab/devup](https://www.npmjs.com/package/@gachlab/devup) **≥ 0.10.1** running locally (uses `info`, `stats`, and `proxy` RPC methods). **≥ 0.12.0** for correct ports on lazy services, and **≥ 0.14.0** for host CPU in the status bar and for services to leave the sidebar when a hot reload drops them. Older daemons keep working, minus those.
+- [@gachlab/devup](https://www.npmjs.com/package/@gachlab/devup) **≥ 0.10.1** running locally (uses `info`, `stats`, and `proxy` RPC methods). **≥ 0.12.0** for correct ports on lazy services, and **≥ 0.14.0** for host CPU in the status bar, for services to leave the sidebar when a hot reload drops them, and for `devup: Debug service`. Older daemons keep working, minus those.
 - Linux or macOS. Windows is not yet supported by the devup daemon.
 
 ## Install

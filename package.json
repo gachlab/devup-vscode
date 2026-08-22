@@ -235,6 +235,16 @@
         "icon": "$(terminal)"
       },
       {
+        "command": "devup.debugService",
+        "title": "devup: Debug service (attach)",
+        "icon": "$(debug-alt)"
+      },
+      {
+        "command": "devup.stopDebugging",
+        "title": "devup: Stop debugging service",
+        "icon": "$(debug-disconnect)"
+      },
+      {
         "command": "devup.copyUrl",
         "title": "devup: Copy service URL",
         "icon": "$(clippy)"
@@ -326,7 +336,7 @@
         },
         {
           "command": "devup.openInBrowser",
-          "when": "view == devupServices && viewItem == service-web",
+          "when": "view == devupServices && viewItem =~ /^(debug-)?service-web$/",
           "group": "1_actions@2"
         },
         {
@@ -348,6 +358,16 @@
           "command": "devup.openTerminal",
           "when": "view == devupServices && viewItem =~ /service-/",
           "group": "1_actions@6"
+        },
+        {
+          "command": "devup.debugService",
+          "when": "view == devupServices && viewItem =~ /service-/",
+          "group": "1_actions@7"
+        },
+        {
+          "command": "devup.stopDebugging",
+          "when": "view == devupServices && viewItem =~ /^debug-service-/",
+          "group": "1_actions@8"
         },
         {
           "command": "devup.copyUrl",

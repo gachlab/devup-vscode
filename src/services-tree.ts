@@ -127,9 +127,13 @@ function serviceItem(svc: ServiceSnapshot, store: StatusStore, forwarder?: PortF
   const forwarded = forwarder?.isForwarded(canonicalPort(svc))
     ? (forwarder.isPaused() ? '  · forwarding paused' : '  · forwarded')
     : '';
-  item.description = `:${canonicalPort(svc)}  ${svc.status}/${svc.health}${statsStr}${forwarded}`;
+  const debugging = typeof svc.debugPort === 'number' ? `  · debug :${svc.debugPort}` : '';
+  item.description = `:${canonicalPort(svc)}  ${svc.status}/${svc.health}${statsStr}${forwarded}${debugging}`;
   item.iconPath = stats ? resourceIcon(svc, stats) : healthIcon(svc);
-  item.contextValue = `service-${svc.type}`;
+  // A prefix rather than a suffix, so the menu clauses can anchor on it
+  // without a lookahead — and so every existing unanchored `/service-/` clause
+  // keeps matching a service that happens to be under the inspector.
+  item.contextValue = `${debugging ? 'debug-' : ''}service-${svc.type}`;
   item.command = { command: 'devup.tailLogs', title: 'Tail logs', arguments: [svc.name] };
   item.tooltip = buildTooltip(svc, stats, store, !!forwarded);
   return item;
@@ -174,6 +178,9 @@ function buildTooltip(
   md.appendMarkdown(`- type: ${svc.type} · phase: ${svc.phase}\n`);
   md.appendMarkdown(`- status: ${svc.status} · health: ${svc.health}\n`);
   if (stats) md.appendMarkdown(`- cpu: ${formatCpu(stats.cpu)} · mem: ${formatMem(stats.memMB)}\n`);
+  if (typeof svc.debugPort === 'number') {
+    md.appendMarkdown(`- inspector: 127.0.0.1:${svc.debugPort} — the port changes on every restart\n`);
+  }
   if (svc.pid != null) md.appendMarkdown(`- pid: ${svc.pid}\n`);
   if (svc.errors)    md.appendMarkdown(`- errors: ${svc.errors}\n`);
   if (svc.restarts)  md.appendMarkdown(`- restarts: ${svc.restarts}\n`);
