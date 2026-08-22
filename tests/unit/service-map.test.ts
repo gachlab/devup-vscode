@@ -72,11 +72,16 @@ describe('applyStreamFrame — removal frames', () => {
     assert.equal(services.size, 1);
   });
 
-  it('ignores non-string entries', () => {
-    const services = mapOf(svc('a'));
-    const effect = applyStreamFrame(services, { event: 'removed', data: [null, 42, { name: 'a' }] });
+  it('does not coerce a non-string entry onto a key that looks like it', () => {
+    // The fixture is deliberate: a service literally named "42" against a
+    // frame carrying the number 42. `Map.delete(42)` cannot match the string
+    // key, so the type guard in the loop is belt-and-braces — what this test
+    // actually pins down is that nothing along the way stringifies the entry,
+    // which is the plausible wrong implementation.
+    const services = mapOf(svc('42'), svc('a'));
+    const effect = applyStreamFrame(services, { event: 'removed', data: [null, 42, { name: 'a' }, ['a']] });
     assert.deepEqual(effect.removed, []);
-    assert.equal(services.size, 1);
+    assert.deepEqual([...services.keys()], ['42', 'a']);
   });
 
   it('does not re-add on a later status frame for a service still in the config', () => {
@@ -113,6 +118,19 @@ describe('applyStreamFrame — frames it does not understand', () => {
       assert.equal(applyStreamFrame(services, { event: 'removed', data }).applied, false);
     }
     assert.equal(services.size, 1);
+  });
+
+  it('hands every caller its own arrays', () => {
+    // The result's arrays are part of the public shape. Were an ignored frame
+    // to return a shared constant, one caller sorting or pushing into it would
+    // corrupt every later ignored frame — phantom names in a "config reloaded"
+    // notification, with nothing at the call site to explain them.
+    const services = mapOf(svc('a'));
+    const first = applyStreamFrame(services, { event: 'log', data: 'line' });
+    const second = applyStreamFrame(services, { event: 'log', data: 'line' });
+    assert.notEqual(first.added, second.added);
+    first.added.push('poisoned');
+    assert.deepEqual(applyStreamFrame(services, { event: 'log', data: 'line' }).added, []);
   });
 
   it('treats an empty snapshot as applied — "connected, nothing configured"', () => {

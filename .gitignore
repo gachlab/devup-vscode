@@ -4,3 +4,6 @@ out/
 *.vsix
 .vscode-test/
 .DS_Store
+
+# Scratch mutation-testing specs (see CLAUDE.md rule 7) — hand-run, never shipped.
+mut-*.json

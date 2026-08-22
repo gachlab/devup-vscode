@@ -28,7 +28,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - New vscode-free modules `src/stats-cache.ts` (stats comparison) and `src/backoff.ts`, plus `formatSystemStats` / `formatSystemTooltip` / `systemStatsKey` in `src/url-builder.ts`.
 - New vscode-free module `src/service-map.ts` — applying one stream frame to the service map, including the entries it must refuse.
 - New vscode-free modules `src/config-file.ts` (the config scanner, tested against real files on disk), `src/socket-path.ts` (checked against devup's own rule name by name) and `src/diagnosis.ts` (which of the four situations we are in, and the text for it). `StatusStore` owns its socket path and re-connects through `setSocketPath()`; `LogChannels` and `ServiceDetailPanels` take a `() => string` and expose `retarget()`, so nothing captures a path a rename can invalidate.
-- 105 new unit tests, each verified by mutation.
+- 106 new unit tests, each verified by mutation.
 
 ## [0.7.0] — 2026-08-21
 

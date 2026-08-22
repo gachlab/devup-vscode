@@ -27,10 +27,17 @@ export interface FrameEffect {
   removed: string[];
 }
 
-const IGNORED: FrameEffect = { applied: false, added: [], removed: [] };
+/** A fresh object each time rather than a shared constant: the arrays are part
+ *  of the public shape, and one caller that sorts or pushes into them would
+ *  corrupt every later ignored frame — surfacing as phantom names in a
+ *  "config reloaded" notification, with nothing at the call site to explain
+ *  it. */
+function ignored(): FrameEffect {
+  return { applied: false, added: [], removed: [] };
+}
 
 export function applyStreamFrame(services: Map<string, ServiceSnapshot>, frame: StreamFrameLike): FrameEffect {
-  if (!Array.isArray(frame.data)) return IGNORED;
+  if (!Array.isArray(frame.data)) return ignored();
 
   if (frame.event === 'status') {
     const added: string[] = [];
@@ -56,7 +63,7 @@ export function applyStreamFrame(services: Map<string, ServiceSnapshot>, frame: 
     return { applied: true, added: [], removed };
   }
 
-  return IGNORED;
+  return ignored();
 }
 
 function isSnapshot(value: unknown): value is ServiceSnapshot {
