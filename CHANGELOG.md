@@ -5,7 +5,9 @@ All notable changes to the devup VS Code extension are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [0.8.0] — 2026-08-22
+
+Ten issues from an audit of the extension against `@gachlab/devup` 0.14.0, which is what makes three of these possible. Older daemons keep working without them.
 
 ### Added
 - **`devup: Debug service`** (#43) — the single biggest thing missing. Debugging a service used to mean stopping it in devup, running it by hand outside, and giving up watch, health checks and restarts while you did. The extension asks the daemon to restart the service under `--inspect` (new in devup 0.14.0, gachlab/devup#84), waits for Node to announce the port, and attaches, with source maps rooted at the service's own directory. **`devup: Stop debugging service`** puts it back — worth knowing that the flag lives on the service in the daemon, so it survives the crash-and-restart that usually prompts a debugging session, and outlives the editor session too.
