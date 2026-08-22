@@ -1,5 +1,7 @@
 import * as vscode from 'vscode';
 import { openStream, sendRpc, type Subscription, type StreamFrame } from './socket-client.js';
+import { StatsCache, type StatsResult } from './stats-cache.js';
+import { Backoff } from './backoff.js';
 
 export type { ServiceSnapshot, ProjectInfo, ProxyInfo, ServiceStats, SystemStats, ConnectionState } from './types.js';
 import type { ServiceSnapshot, ProjectInfo, ProxyInfo, ServiceStats, SystemStats, ConnectionState } from './types.js';
@@ -12,8 +14,8 @@ export class StatusStore implements vscode.Disposable {
   private readonly services = new Map<string, ServiceSnapshot>();
   private info: ProjectInfo = { project: '', profiles: {} };
   private proxy: ProxyInfo | null = null;
-  private readonly serviceStats = new Map<string, ServiceStats>();
-  private systemStats: SystemStats | null = null;
+  private readonly stats = new StatsCache();
+  private readonly backoff = new Backoff();
   private subscription: Subscription | null = null;
   private reconnectTimer: NodeJS.Timeout | null = null;
   private statsTimer: NodeJS.Timeout | null = null;
@@ -32,8 +34,8 @@ export class StatusStore implements vscode.Disposable {
   getState(): ConnectionState { return this.state; }
   getInfo(): ProjectInfo { return this.info; }
   getProxy(): ProxyInfo | null { return this.proxy; }
-  getServiceStats(name: string): ServiceStats | null { return this.serviceStats.get(name) ?? null; }
-  getSystemStats(): SystemStats | null { return this.systemStats; }
+  getServiceStats(name: string): ServiceStats | null { return this.stats.get(name); }
+  getSystemStats(): SystemStats | null { return this.stats.getSystem(); }
 
   private async connect(): Promise<void> {
     if (this.disposed) return;
@@ -52,6 +54,9 @@ export class StatusStore implements vscode.Disposable {
       this.proxy = snapshot.proxy ?? null;
       if (infoResult) this.info = infoResult;
       this.state = 'connected';
+      // A daemon that comes back after an hour down should be picked up in
+      // 3 s, not at whatever delay the backoff had climbed to.
+      this.backoff.reset();
       this.emitter.fire();
       this.startStatsPolling();
     } catch {
@@ -83,16 +88,10 @@ export class StatusStore implements vscode.Disposable {
     const poll = async () => {
       if (this.state !== 'connected') return;
       try {
-        const result = await sendRpc(this.socketPath, 'stats', {}, { timeoutMs: 3000 }) as {
-          services: Record<string, ServiceStats>;
-          system: SystemStats;
-        };
-        this.serviceStats.clear();
-        for (const [name, s] of Object.entries(result.services ?? {})) {
-          this.serviceStats.set(name, s);
-        }
-        this.systemStats = result.system ?? null;
-        this.emitter.fire();
+        const result = await sendRpc(this.socketPath, 'stats', {}, { timeoutMs: 3000 }) as StatsResult;
+        // Only when a number actually moved: this poll runs every 3 s forever,
+        // and every subscriber recomputes on each event (issue #40).
+        if (this.stats.update(result)) this.emitter.fire();
       } catch { /* core < 0.10.0 or transient — degrade gracefully */ }
     };
     void poll();
@@ -101,8 +100,8 @@ export class StatusStore implements vscode.Disposable {
 
   private stopStatsPolling(): void {
     if (this.statsTimer) { clearInterval(this.statsTimer); this.statsTimer = null; }
-    this.serviceStats.clear();
-    this.systemStats = null;
+    // Callers fire their own event around this, so the return is not needed.
+    this.stats.clear();
   }
 
   private detectReloadChanges(prevNames: Set<string>): void {
@@ -133,7 +132,7 @@ export class StatusStore implements vscode.Disposable {
     this.reconnectTimer = setTimeout(() => {
       this.reconnectTimer = null;
       void this.connect();
-    }, 3000);
+    }, this.backoff.next());
   }
 
   dispose(): void {

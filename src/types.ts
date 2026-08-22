@@ -42,6 +42,14 @@ export interface SystemStats {
   totalMemMB: number;
   freeMemMB: number;
   cpuCores: number;
+  /** 1-minute load average (@gachlab/devup >= 0.14.0). Absent on Windows,
+   *  where `os.loadavg()` is hardcoded to zeroes and the daemon omits it
+   *  rather than reporting an idle machine. */
+  loadAvg1?: number;
+  /** That load as a percentage of available cores — the figure to show as
+   *  "CPU". Absent for the same reason as `loadAvg1`, and on daemons older
+   *  than 0.14.0. */
+  cpuPercent?: number;
 }
 
 export type ConnectionState = 'connecting' | 'connected' | 'unreachable';

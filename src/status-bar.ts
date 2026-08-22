@@ -1,7 +1,7 @@
 import * as vscode from 'vscode';
 import type { DiscoveryResult } from './discovery.js';
 import type { StatusStore } from './status-store.js';
-import { formatCpu, formatMem } from './url-builder.js';
+import { formatSystemStats, formatSystemTooltip } from './url-builder.js';
 
 /** Aggregate status bar item — derives its content from the StatusStore.
  *  No longer polls; updates live as `status.follow` frames flow in. */
@@ -35,9 +35,8 @@ export class DevupStatusBar implements vscode.Disposable {
     const anyStarting = services.some(s => s.status === 'starting' || s.health === 'wait');
 
     const sys = this.store.getSystemStats();
-    const sysStr = sys
-      ? `  $(pulse) ${formatCpu(100 - (sys.freeMemMB / sys.totalMemMB) * 100)} · ${formatMem(sys.totalMemMB - sys.freeMemMB)}/${formatMem(sys.totalMemMB)}`
-      : '';
+    const summary = formatSystemStats(sys);
+    const sysStr = summary ? `  ${summary}` : '';
 
     if (anyCrashed) {
       this.item.text = `$(error) devup: ${up}/${total} up${sysStr}`;
@@ -49,7 +48,8 @@ export class DevupStatusBar implements vscode.Disposable {
       this.item.text = `$(check) devup: ${up}/${total} up${sysStr}`;
       this.item.backgroundColor = undefined;
     }
-    this.item.tooltip = `devup project: ${this.discovery.projectName}\nSocket: ${this.discovery.socketPath}\n${up} of ${total} services healthy${sys ? `\nRAM: ${formatMem(sys.totalMemMB - sys.freeMemMB)} used of ${formatMem(sys.totalMemMB)} · ${sys.cpuCores} cores` : ''}\n\nClick: tail logs for a service`;
+    const sysTooltip = formatSystemTooltip(sys);
+    this.item.tooltip = `devup project: ${this.discovery.projectName}\nSocket: ${this.discovery.socketPath}\n${up} of ${total} services healthy${sysTooltip ? `\n${sysTooltip}` : ''}\n\nClick: tail logs for a service`;
   }
 
   dispose(): void {

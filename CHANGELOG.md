@@ -5,6 +5,16 @@ All notable changes to the devup VS Code extension are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Fixed
+- **The status bar showed memory twice and called one of them CPU** (#37). The `$(pulse)` figure was `100 - free/total`, a *memory* percentage, printed immediately before the same memory in GB — so `$(pulse) 38.7% · 12 GB/31 GB` was one quantity shown twice, with the first labelled wrong. There was no host CPU figure in the protocol at all until devup 0.14.0 added `cpuPercent` (load average as a share of cores); the status bar now shows that, and memory in absolute terms only. Where the daemon reports no CPU — an older daemon, or Windows, where `os.loadavg()` is hardcoded to zeroes — the segment is memory alone rather than a plausible-looking stand-in.
+- **The whole UI recomputed every 3 seconds whether or not anything moved** (#40). The `stats` poll fired a change event on every tick, so the tree, status bar, badge, context key and every open detail panel re-rendered continuously — the reason `PortForwarder` had to keep its own fingerprint to filter the noise. The store now compares the new numbers against the previous ones and stays quiet when they match. The poll is *not* paused when the tree is hidden, as the issue also suggested: the status bar consumes the same stats and is always on screen.
+- **Reconnecting to a daemon that is not running retried every 3 s forever** (#41), roughly 1,200 socket opens an hour against a path that does not exist. The delay now doubles from 3 s to a 30 s ceiling and resets on a successful connect, so a daemon that comes back after an hour down is still picked up within 3 s.
+
+### Internal
+- New vscode-free modules `src/stats-cache.ts` (stats comparison) and `src/backoff.ts`, plus `formatSystemStats` / `formatSystemTooltip` in `src/url-builder.ts` — 29 new unit tests, each verified by mutation.
+
 ## [0.7.0] — 2026-08-21
 
 A minor rather than a patch: the default changes behaviour for anyone who never touched the setting, and Marketplace auto-update would apply it unasked.

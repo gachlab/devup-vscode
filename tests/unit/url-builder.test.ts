@@ -1,7 +1,7 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { buildServiceUrl, formatCpu, formatMem } from '../../src/url-builder.js';
-import type { ProxyInfo } from '../../src/types.js';
+import { buildServiceUrl, formatCpu, formatMem, formatSystemStats, formatSystemTooltip } from '../../src/url-builder.js';
+import type { ProxyInfo, SystemStats } from '../../src/types.js';
 
 const proxy: ProxyInfo = {
   active: true,
@@ -67,5 +67,58 @@ describe('formatMem', () => {
 
   it('formats zero', () => {
     assert.equal(formatMem(0), '0 MB');
+  });
+});
+
+// 31 GB total, 19 GB free — 12 GB in use. Deliberately not a round percentage
+// of anything: the bug this covers printed the *memory* share (38.7%) behind a
+// CPU icon, so a fixture where the two happen to coincide would prove nothing.
+const sys: SystemStats = { totalMemMB: 31000, freeMemMB: 19000, cpuCores: 8, loadAvg1: 1.2, cpuPercent: 15 };
+
+describe('formatSystemStats', () => {
+  it('shows the reported CPU, not the memory share', () => {
+    const out = formatSystemStats(sys);
+    assert.match(out, /\$\(pulse\) 15\.0%/);
+    // 12000/31000 = 38.7% — what the old code put behind the pulse icon.
+    assert.doesNotMatch(out, /38\.7%/);
+  });
+
+  it('shows memory in absolute terms only', () => {
+    assert.equal(formatSystemStats(sys), '$(pulse) 15.0% · $(database) 11.7 GB/30.3 GB');
+  });
+
+  it('omits CPU when the daemon does not report it', () => {
+    const { cpuPercent, ...rest } = sys;
+    const out = formatSystemStats(rest as SystemStats);
+    assert.equal(out, '$(database) 11.7 GB/30.3 GB');
+    assert.doesNotMatch(out, /\$\(pulse\)/);
+    assert.doesNotMatch(out, /%/);
+  });
+
+  it('keeps a zero CPU reading, which is a real number', () => {
+    assert.match(formatSystemStats({ ...sys, cpuPercent: 0 }), /\$\(pulse\) 0\.0%/);
+  });
+
+  it('is empty without stats', () => {
+    assert.equal(formatSystemStats(null), '');
+  });
+
+  it('drops the memory segment rather than printing NaN', () => {
+    assert.equal(formatSystemStats({ totalMemMB: 0, freeMemMB: 0, cpuCores: 8, cpuPercent: 15 }), '$(pulse) 15.0%');
+  });
+});
+
+describe('formatSystemTooltip', () => {
+  it('spells out CPU against the core count and load', () => {
+    assert.equal(formatSystemTooltip(sys), 'RAM: 11.7 GB used of 30.3 GB\nCPU: 15.0% of 8 cores, load 1.2');
+  });
+
+  it('falls back to the core count when there is no CPU figure', () => {
+    const { cpuPercent, loadAvg1, ...rest } = sys;
+    assert.equal(formatSystemTooltip(rest as SystemStats), 'RAM: 11.7 GB used of 30.3 GB\n8 cores');
+  });
+
+  it('is empty without stats', () => {
+    assert.equal(formatSystemTooltip(null), '');
   });
 });
