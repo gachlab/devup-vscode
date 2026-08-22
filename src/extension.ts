@@ -16,9 +16,21 @@ import { canonicalPort } from './forward-logic.js';
 /** Every config file discovery consults, as a watcher glob. */
 const CONFIG_GLOB = '**/devup.config.{ts,js,mjs,json}';
 
+/** A watcher fires on every save, and a save lands on every keystroke under
+ *  `files.autoSave: afterDelay`. Renaming `Guesthub` a character at a time
+ *  would otherwise resolve — and tear down and reconnect to — a different
+ *  socket for `Guest`, `Guesth`, `Guesthu`… */
+const REDISCOVER_DEBOUNCE_MS = 600;
+
 export function activate(context: vscode.ExtensionContext): void {
   const initial = discoverWorkspace();
-  if (!initial) return;
+  if (!initial) {
+    // No folder open. The view is contributed statically, so it is reachable
+    // from the activity bar; without this the welcome clauses all evaluate
+    // false and it renders blank.
+    void vscode.commands.executeCommand('setContext', 'devup.diagnosis', 'noWorkspace');
+    return;
+  }
 
   // Not const: discovery re-runs when the config file or the overriding
   // settings change, and everything below reads it through a closure rather
@@ -124,6 +136,20 @@ export function activate(context: vscode.ExtensionContext): void {
   // ── Re-discovery ─────────────────────────────────────────────────────────
   // Discovery used to run once, at activation, so renaming a project moved its
   // socket and the extension went quiet until the window was reloaded.
+  // Log streams and detail panels are retargeted when the *store* next
+  // connects, not when the path moves. At the moment of a rename the daemon is
+  // still running under the old name, so the new socket does not exist yet:
+  // re-opening a stream there fails immediately and, unlike the store, a log
+  // stream has no backoff — the channel would print "socket not found" and
+  // stay dead for the rest of the session.
+  let retargetOnConnect = false;
+  context.subscriptions.push(activeStore.onDidChange(() => {
+    if (!retargetOnConnect || activeStore.getState() !== 'connected') return;
+    retargetOnConnect = false;
+    activeLogChannels.retarget();
+    activeDetailPanels.retarget();
+  }));
+
   const rediscover = () => {
     const next = discoverWorkspace();
     // Every folder closed. Keep talking to the daemon we know about rather
@@ -134,19 +160,27 @@ export function activate(context: vscode.ExtensionContext): void {
     activeStatusBar.setDiscovery(next);
     updateContext();
     if (!moved) return;
+    retargetOnConnect = true;
     activeStore.setSocketPath(next.socketPath);
-    activeLogChannels.retarget();
-    activeDetailPanels.retarget();
+  };
+
+  let rediscoverTimer: NodeJS.Timeout | null = null;
+  const rediscoverSoon = () => {
+    if (rediscoverTimer) clearTimeout(rediscoverTimer);
+    rediscoverTimer = setTimeout(() => { rediscoverTimer = null; rediscover(); }, REDISCOVER_DEBOUNCE_MS);
   };
 
   const watcher = vscode.workspace.createFileSystemWatcher(CONFIG_GLOB);
   context.subscriptions.push(
     watcher,
-    watcher.onDidCreate(rediscover),
-    watcher.onDidChange(rediscover),
-    watcher.onDidDelete(rediscover),
+    { dispose: () => { if (rediscoverTimer) clearTimeout(rediscoverTimer); } },
+    watcher.onDidCreate(rediscoverSoon),
+    watcher.onDidChange(rediscoverSoon),
+    watcher.onDidDelete(rediscoverSoon),
     // The activation event fires on a config in any folder, so which folder is
     // the devup one can change as folders are added or removed.
+    // These two are deliberate acts rather than a stream of saves, so they
+    // take effect at once.
     vscode.workspace.onDidChangeWorkspaceFolders(rediscover),
     vscode.workspace.onDidChangeConfiguration(e => {
       if (e.affectsConfiguration('devup.socketPath') || e.affectsConfiguration('devup.projectName')) rediscover();

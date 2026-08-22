@@ -126,7 +126,13 @@ function topLevelName(src: string, start: number): string | null {
       const m = /^(?:name|['"]name['"])\s*:\s*(['"`])((?:[^\\]|\\.)*?)\1/.exec(src.slice(i));
       if (m) {
         const value = m[2]!.trim();
-        if (value) return value;
+        // A template literal with an interpolation is not a literal name:
+        // `name: `${pkg.name}`` would otherwise resolve to a socket called
+        // `sock-pkg.name.sock` and be reported as read from the config, so the
+        // user would be told to start a daemon rather than that the name could
+        // not be read. Returning null routes it to the honest answer.
+        if (value && !(m[1] === '`' && value.includes('${'))) return value;
+        return null;
       }
     }
     if (ch === '"' || ch === "'" || ch === '`') { i = skipString(src, i); continue; }

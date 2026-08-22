@@ -105,6 +105,11 @@ export class StatusStore implements vscode.Disposable {
   }
 
   private async doConnect(): Promise<void> {
+    // Captured, not re-read: `setSocketPath` can land mid-probe, and the
+    // stream below would then be opened on the new path carrying a snapshot
+    // taken from the old daemon. The deferred restart re-does all of this
+    // against the new path a moment later.
+    const path = this.socketPath;
     this.state = 'connecting';
     this.emitter.fire();
 
@@ -112,8 +117,8 @@ export class StatusStore implements vscode.Disposable {
     // and surfaces errors before opening the streaming subscription.
     try {
       const [snapshot, infoResult] = await Promise.all([
-        sendRpc(this.socketPath, 'status', {}, { timeoutMs: 2000 }) as Promise<{ services: ServiceSnapshot[]; proxy: ProxyInfo | null }>,
-        sendRpc(this.socketPath, 'info', {}, { timeoutMs: 2000 }).catch(() => null) as Promise<ProjectInfo | null>,
+        sendRpc(path, 'status', {}, { timeoutMs: 2000 }) as Promise<{ services: ServiceSnapshot[]; proxy: ProxyInfo | null }>,
+        sendRpc(path, 'info', {}, { timeoutMs: 2000 }).catch(() => null) as Promise<ProjectInfo | null>,
       ]);
       // dispose() can land during the probe above; without this the poll
       // interval and the stream below outlive the extension, and nothing is
@@ -147,7 +152,7 @@ export class StatusStore implements vscode.Disposable {
     // writing into `services` and firing events from a stream nobody owns.
     this.subscription?.close();
     this.subscription = openStream(
-      this.socketPath, 'status.follow', {},
+      path, 'status.follow', {},
       (frame: StreamFrame) => {
         // Reset here rather than after the `status` probe: one-shot RPCs can
         // succeed against a daemon whose `status.follow` then fails or drops

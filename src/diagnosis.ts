@@ -11,6 +11,11 @@
  *  this function's four cases the same value means they cannot drift. */
 export type Diagnosis =
   | 'connected'
+  /** No workspace folder at all — set by `activate()` before discovery can
+   *  run, never returned by `diagnose()`. Listed here because the type is the
+   *  contract for the `devup.diagnosis` context key, and an unset key matches
+   *  none of the welcome view's clauses: the sidebar would be blank. */
+  | 'noWorkspace'
   /** No devup.config.* anywhere in the workspace — nothing to resolve. */
   | 'noConfig'
   /** A config exists but no name came out of it, so the socket path is a guess
@@ -68,6 +73,7 @@ export function describeDiagnosis(d: Diagnosis, detail: DiagnosisDetail): string
 
 const EXPLANATION: Record<Diagnosis, string> = {
   connected: 'The daemon is connected.',
+  noWorkspace: 'No folder is open, so there is nothing to discover. Open the folder that holds your devup config.',
   noConfig: 'No devup.config.{ts,js,mjs,json} was found, so there is no project name to resolve a socket from. Open a folder that has one, or set devup.socketPath.',
   guessedName: 'The project name could not be read from the config file, so it fell back to the workspace folder name. That will only match a daemon by coincidence — set devup.projectName to the name in your config.',
   socketMissing: 'Nothing is listening at that path, which is what it looks like when the daemon is not running. Start it with devup up -d.',

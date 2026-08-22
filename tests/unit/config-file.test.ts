@@ -89,6 +89,16 @@ export default defineConfig({
     assert.equal(parseProjectName('export default defineConfig({\n  envFile: `${process.cwd()}/.env`,\n  name: \'Tmpl\',\n})'), 'Tmpl');
   });
 
+  it('refuses an interpolated template literal rather than inventing a name', () => {
+    // `${pkg.name}` would sanitise to `pkg.name` and resolve to
+    // sock-pkg.name.sock — reported as read from the config, so the user would
+    // be told to start a daemon instead of that the name could not be read.
+    assert.equal(parseProjectName('export default defineConfig({ name: `${pkg.name}` })'), null);
+    assert.equal(parseProjectName('export default defineConfig({ name: `devup-${env}` })'), null);
+    // A backtick with nothing interpolated is a perfectly good literal.
+    assert.equal(parseProjectName('export default defineConfig({ name: `Plain` })'), 'Plain');
+  });
+
   it('does not match a key that merely ends in name', () => {
     assert.equal(parseProjectName(`export default defineConfig({
   filename: 'nope.txt',
