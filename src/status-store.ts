@@ -1,6 +1,7 @@
 import * as vscode from 'vscode';
 import { openStream, sendRpc, type Subscription, type StreamFrame } from './socket-client.js';
 import { StatsCache, type StatsResult } from './stats-cache.js';
+import { applyStreamFrame } from './service-map.js';
 import { Backoff, reconnectDelay } from './backoff.js';
 
 export type { ServiceSnapshot, ProjectInfo, ProxyInfo, ServiceStats, SystemStats, ConnectionState } from './types.js';
@@ -167,12 +168,9 @@ export class StatusStore implements vscode.Disposable {
         // connect/fail loop — the retry storm the backoff exists to stop. A
         // delivered frame is proof the subscription works.
         this.backoff.reset();
-        if (frame.event !== 'status' || !Array.isArray(frame.data)) return;
-        const prevNames = new Set(this.services.keys());
-        for (const s of frame.data as ServiceSnapshot[]) {
-          this.services.set(s.name, s);
-        }
-        this.detectReloadChanges(prevNames);
+        const effect = applyStreamFrame(this.services, frame);
+        if (!effect.applied) return;
+        this.announceReload(effect.added, effect.removed);
         this.emitter.fire();
       },
       () => this.onConnectionLost(),
@@ -230,12 +228,12 @@ export class StatusStore implements vscode.Disposable {
     this.stats.clear();
   }
 
-  private detectReloadChanges(prevNames: Set<string>): void {
-    if (!vscode.workspace.getConfiguration('devup.notifications').get<boolean>('configReload', true)) return;
-    const currentNames = new Set(this.services.keys());
-    const added = [...currentNames].filter(n => !prevNames.has(n));
-    const removed = [...prevNames].filter(n => !currentNames.has(n));
+  /** The "config reloaded" notification. Its `removed:` half was unreachable
+   *  until the stream's removal frames were handled — nothing ever left the
+   *  map, so the diff could not produce one. */
+  private announceReload(added: string[], removed: string[]): void {
     if (!added.length && !removed.length) return;
+    if (!vscode.workspace.getConfiguration('devup.notifications').get<boolean>('configReload', true)) return;
     const parts: string[] = [];
     if (added.length) parts.push(`added: ${added.join(', ')}`);
     if (removed.length) parts.push(`removed: ${removed.join(', ')}`);

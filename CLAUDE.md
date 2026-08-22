@@ -39,6 +39,11 @@ Three more mirrors, all of which have drifted at least once:
 Every one of these fails the same way: the sidebar insists nothing is running
 while the daemon is up.
 
+`status.follow` also carries **two** kinds of frame, not one: `status`, which
+after the opening snapshot is incremental (one service per frame), and
+`removed`, which is the only way a service ever leaves. Handling only the
+first can only grow the map — see `service-map.ts` and issue #39.
+
 ## 3. `asExternalUri` has two rules, both easy to break
 
 - **Do not pair it with `openExternal`.** The API docs: *"uris passed through

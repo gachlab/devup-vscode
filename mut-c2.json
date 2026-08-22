@@ -1,0 +1,10 @@
+[
+  {"label": "#39 unknown events applied",
+   "file": "src/service-map.ts",
+   "old": "  return IGNORED;\n}\n\nfunction isSnapshot",
+   "new": "  return { applied: true, added: [], removed: [] };\n}\n\nfunction isSnapshot"},
+  {"label": "#39 unknown events mutate the map",
+   "file": "src/service-map.ts",
+   "old": "  if (frame.event === 'status') {",
+   "new": "  if (frame.event !== 'removed') {"}
+]
