@@ -127,8 +127,28 @@
     "viewsWelcome": [
       {
         "view": "devupServices",
-        "contents": "No devup daemon is running for this project.\n[Start daemon (devup up -d)](command:devup.daemon.start)\n\n[Open devup documentation](https://github.com/gachlab/devup#readme)",
-        "when": "!devup.daemonReachable"
+        "contents": "No devup daemon is running for this project.\n[Start daemon (devup up -d)](command:devup.daemon.start)\n[Why can't it be reached?](command:devup.diagnostics)",
+        "when": "devup.diagnosis == socketMissing"
+      },
+      {
+        "view": "devupServices",
+        "contents": "The socket for this project exists, but the daemon is not answering — it may still be starting, may be wedged, or the file may be left over from a crash.\n[Restart daemon](command:devup.daemon.restart)\n[Show connection details](command:devup.diagnostics)",
+        "when": "devup.diagnosis == noAnswer"
+      },
+      {
+        "view": "devupServices",
+        "contents": "The project name could not be read from your devup config, so the socket path was guessed from the folder name — which matches a running daemon only by coincidence.\n[Set the project name](command:devup.setProjectName)\n[Show connection details](command:devup.diagnostics)",
+        "when": "devup.diagnosis == guessedName"
+      },
+      {
+        "view": "devupServices",
+        "contents": "Open the folder that holds your devup.config.* to control its stack from here.\n[Open Folder](command:workbench.action.files.openFolder)\n\n[Open devup documentation](https://github.com/gachlab/devup#readme)",
+        "when": "devup.diagnosis == noWorkspace"
+      },
+      {
+        "view": "devupServices",
+        "contents": "No devup.config.ts, .js or .json was found in this workspace, so there is no project name to resolve a daemon socket from.\n[Set the project name](command:devup.setProjectName)\n[Show connection details](command:devup.diagnostics)\n\n[Open devup documentation](https://github.com/gachlab/devup#readme)",
+        "when": "devup.diagnosis == noConfig"
       }
     ],
     "viewsContainers": {
@@ -208,6 +228,16 @@
         "command": "devup.openTerminal",
         "title": "devup: Open terminal in service cwd",
         "icon": "$(terminal)"
+      },
+      {
+        "command": "devup.diagnostics",
+        "title": "devup: Show connection details",
+        "icon": "$(info)"
+      },
+      {
+        "command": "devup.setProjectName",
+        "title": "devup: Set the project name…",
+        "icon": "$(edit)"
       }
     ],
     "menus": {

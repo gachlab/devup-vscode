@@ -19,6 +19,10 @@ export class StatusStore implements vscode.Disposable {
   /** Epoch millis until which reconnects retry at a fixed short delay. Set by
    *  `expectRestart()`; 0 means the backoff decides on its own. */
   private fastRetryUntil = 0;
+  /** A socket path change that arrived while a connect was in flight. */
+  private pendingRestart = false;
+  /** The path the live connection was established against. */
+  private statsPath = '';
   private subscription: Subscription | null = null;
   private reconnectTimer: NodeJS.Timeout | null = null;
   private statsTimer: NodeJS.Timeout | null = null;
@@ -36,7 +40,7 @@ export class StatusStore implements vscode.Disposable {
   readonly onDidChange = this.emitter.event;
   private disposed = false;
 
-  constructor(private readonly socketPath: string) {}
+  constructor(private socketPath: string) {}
 
   start(): void {
     void this.connect();
@@ -57,13 +61,62 @@ export class StatusStore implements vscode.Disposable {
     } finally {
       this.connecting = false;
     }
-    if (this.refreshPending && !this.disposed) {
+    if (this.disposed) return;
+    // Order matters: a path change supersedes a refresh, since the refresh was
+    // aimed at a daemon we are no longer talking to.
+    if (this.pendingRestart) {
+      this.pendingRestart = false;
+      this.refreshPending = false;
+      this.restart();
+      return;
+    }
+    if (this.refreshPending) {
       this.refreshPending = false;
       this.refresh();
     }
   }
 
+  /** Point the store at a different daemon.
+   *
+   *  Discovery re-runs whenever `devup.config.*` or the overriding settings
+   *  change, and renaming a project moves its socket — so this is the normal
+   *  way a rename is picked up, rather than the window reload it used to
+   *  need (issue #38). */
+  setSocketPath(path: string): void {
+    if (this.disposed || path === this.socketPath) return;
+    this.socketPath = path;
+    // A connect in flight is probing the old path and would open its stream on
+    // the new one; let it finish and restart cleanly instead.
+    if (this.connecting) { this.pendingRestart = true; return; }
+    this.restart();
+  }
+
+  getSocketPath(): string { return this.socketPath; }
+
+  private restart(): void {
+    this.subscription?.close();
+    this.subscription = null;
+    if (this.reconnectTimer) { clearTimeout(this.reconnectTimer); this.reconnectTimer = null; }
+    this.stopStatsPolling();
+    this.backoff.reset();
+    this.services.clear();
+    this.proxy = null;
+    // Also the project info: `info` is allowed to fail, and doConnect only
+    // assigns when it succeeds — so a new project whose info call fails would
+    // otherwise inherit the previous project's profiles, and a tree filtered
+    // by `devup.profile` would render empty against a connected daemon.
+    this.info = { project: '', profiles: {} };
+    this.state = 'connecting';
+    this.emitter.fire();
+    void this.connect();
+  }
+
   private async doConnect(): Promise<void> {
+    // Captured, not re-read: `setSocketPath` can land mid-probe, and the
+    // stream below would then be opened on the new path carrying a snapshot
+    // taken from the old daemon. The deferred restart re-does all of this
+    // against the new path a moment later.
+    const path = this.socketPath;
     this.state = 'connecting';
     this.emitter.fire();
 
@@ -71,8 +124,8 @@ export class StatusStore implements vscode.Disposable {
     // and surfaces errors before opening the streaming subscription.
     try {
       const [snapshot, infoResult] = await Promise.all([
-        sendRpc(this.socketPath, 'status', {}, { timeoutMs: 2000 }) as Promise<{ services: ServiceSnapshot[]; proxy: ProxyInfo | null }>,
-        sendRpc(this.socketPath, 'info', {}, { timeoutMs: 2000 }).catch(() => null) as Promise<ProjectInfo | null>,
+        sendRpc(path, 'status', {}, { timeoutMs: 2000 }) as Promise<{ services: ServiceSnapshot[]; proxy: ProxyInfo | null }>,
+        sendRpc(path, 'info', {}, { timeoutMs: 2000 }).catch(() => null) as Promise<ProjectInfo | null>,
       ]);
       // dispose() can land during the probe above; without this the poll
       // interval and the stream below outlive the extension, and nothing is
@@ -91,7 +144,7 @@ export class StatusStore implements vscode.Disposable {
       this.state = 'connected';
       // Before the event, not after: this drops stats left over from the
       // previous connection, and firing first would render them once more.
-      this.startStatsPolling();
+      this.startStatsPolling(path);
       this.emitter.fire();
     } catch {
       this.state = 'unreachable';
@@ -106,7 +159,7 @@ export class StatusStore implements vscode.Disposable {
     // writing into `services` and firing events from a stream nobody owns.
     this.subscription?.close();
     this.subscription = openStream(
-      this.socketPath, 'status.follow', {},
+      path, 'status.follow', {},
       (frame: StreamFrame) => {
         // Reset here rather than after the `status` probe: one-shot RPCs can
         // succeed against a daemon whose `status.follow` then fails or drops
@@ -148,9 +201,9 @@ export class StatusStore implements vscode.Disposable {
   }
 
   private async pollStats(): Promise<void> {
-    if (this.state !== 'connected') return;
+    if (this.state !== 'connected' || !this.statsPath) return;
     try {
-      const result = await sendRpc(this.socketPath, 'stats', {}, { timeoutMs: 3000 }) as StatsResult;
+      const result = await sendRpc(this.statsPath, 'stats', {}, { timeoutMs: 3000 }) as StatsResult;
       // The stream can drop while this RPC is in flight, in which case the
       // disconnect has already cleared the cache — repopulating it now would
       // leave the status bar showing host memory for a daemon that is gone.
@@ -161,14 +214,18 @@ export class StatusStore implements vscode.Disposable {
     } catch { /* core < 0.10.0 or transient — degrade gracefully */ }
   }
 
-  private startStatsPolling(): void {
+  private startStatsPolling(path: string): void {
     this.stopStatsPolling();
+    // The connection's own path, for the same reason doConnect captures one:
+    // `setSocketPath` may already have moved the field while deferring.
+    this.statsPath = path;
     void this.pollStats();
     this.statsTimer = setInterval(() => void this.pollStats(), 3000);
   }
 
   private stopStatsPolling(): void {
     if (this.statsTimer) { clearInterval(this.statsTimer); this.statsTimer = null; }
+    this.statsPath = '';
     // Callers fire their own event around this, so the return is not needed.
     this.stats.clear();
   }
