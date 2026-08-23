@@ -32,6 +32,7 @@ suite('Extension Integration', () => {
       'devup.debugService',
       'devup.stopDebugging',
       'devup.debugStack',
+      'devup.openWalkthrough',
     ];
     for (const cmd of expected) {
       assert.ok(devupCmds.includes(cmd), `command ${cmd} should be registered`);

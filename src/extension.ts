@@ -10,6 +10,7 @@ import { registerServiceCommands } from './commands.js';
 import { registerDaemonCommands } from './daemon-commands.js';
 import { registerDebugCommands } from './debug-commands.js';
 import { DEBUG_TYPE } from './debug-config.js';
+import { considerTour, TOUR_OFFERED_KEY } from './tour.js';
 import { ServiceDetailPanels } from './service-detail.js';
 import { ProfilePicker } from './profile-picker.js';
 import { PortForwarder } from './port-forward.js';
@@ -204,6 +205,28 @@ export function activate(context: vscode.ExtensionContext): void {
 
   // Attach a debugger to a service (needs devup >= 0.14.0).
   registerDebugCommands(context, activeStore, socketPath, folderPath, () => discovery.folder);
+
+  // Offer the debugging walkthrough once, the first time there is a live stack
+  // to try it against.
+  context.subscriptions.push(activeStore.onDidChange(() => {
+    const offer = considerTour({
+      alreadyOffered: context.globalState.get<boolean>(TOUR_OFFERED_KEY, false),
+      connected: activeStore.getState() === 'connected',
+    });
+    if (!offer.show) return;
+    if (offer.remember) void context.globalState.update(TOUR_OFFERED_KEY, true);
+    void vscode.window.showInformationMessage(
+      'devup can attach a debugger to your services, and open your frontend alongside them — without taking anything out of devup.',
+      'Show me how',
+    ).then(choice => {
+      if (choice) void vscode.commands.executeCommand('devup.openWalkthrough');
+    });
+  }));
+
+  context.subscriptions.push(
+    vscode.commands.registerCommand('devup.openWalkthrough', () =>
+      vscode.commands.executeCommand('workbench.action.openWalkthrough', 'gachlab.devup-vscode#devup.debugging', false)),
+  );
 
   // ── Re-discovery ─────────────────────────────────────────────────────────
   // Discovery used to run once, at activation, so renaming a project moved its
