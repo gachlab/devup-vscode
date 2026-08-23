@@ -2,6 +2,7 @@ import { realpathSync } from 'node:fs';
 import * as vscode from 'vscode';
 import { sendRpc, RpcCallError } from './socket-client.js';
 import type { StatusStore } from './status-store.js';
+import { tooOldMessage } from './daemon-version.js';
 import { extractSvcName } from './svc-name.js';
 import {
   buildAttachConfig, buildBrowserConfig, buildServiceConfigurations, classifyTermination,
@@ -403,7 +404,12 @@ async function withProgress(title: string, run: () => Promise<unknown>): Promise
     // user could act on.
     void vscode.window.showErrorMessage(
       message.includes('unknown method')
-        ? 'devup: this daemon cannot start a service under the inspector. Needs @gachlab/devup 0.14.0 or newer.'
+        // No version to name here, and there never can be: `unknown method:
+        // debug` only comes from a daemon without `debug` in its dispatch
+        // table, which means older than 0.14.0 — and so older than the 0.16.0
+        // that first reported a version at all. `devup: Show connection
+        // details` is where a version-bearing daemon names itself.
+        ? `devup: ${tooOldMessage('this daemon cannot start a service under the inspector.', '0.14.0')}`
         : `devup: ${message}`,
     );
     return { ok: false };

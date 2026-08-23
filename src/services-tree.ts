@@ -183,7 +183,12 @@ function buildTooltip(
   }
   if (svc.pid != null) md.appendMarkdown(`- pid: ${svc.pid}\n`);
   if (svc.errors)    md.appendMarkdown(`- errors: ${svc.errors}\n`);
+  // Both, when they disagree. `restarts` is the auto-restart *budget* and a
+  // manual restart resets it, so a service showing "restarts: 0" can have
+  // crashed a dozen times — which is the number someone reading this actually
+  // wants. `crashes` arrives from @gachlab/devup 0.16.0.
   if (svc.restarts)  md.appendMarkdown(`- restarts: ${svc.restarts}\n`);
+  if (svc.crashes)   md.appendMarkdown(`- crashes: ${svc.crashes} since the daemon started\n`);
   const proxy = store.getProxy();
   if (proxy?.active) {
     const route = proxyRouteFor(svc.name, proxy);

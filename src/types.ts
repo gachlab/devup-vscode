@@ -16,7 +16,14 @@ export interface ServiceSnapshot {
   cwd?: string;
   pid: number | null;
   errors: number;
+  /** The auto-restart **budget** spent, not a history: the daemon resets it to
+   *  0 on every manual restart and every explicit start. Never use it to ask
+   *  whether a service died between two moments — that is what `crashes` is
+   *  for. */
   restarts: number;
+  /** How many times the service has crashed since the daemon started. Only
+   *  ever goes up. Present from @gachlab/devup >= 0.16.0. */
+  crashes?: number;
   crashLog?: string[] | null;
   /** When the current process started, or null when it is not running.
    *  Present from @gachlab/devup >= 0.14.0. */
@@ -31,6 +38,18 @@ export interface ServiceSnapshot {
 export interface ProjectInfo {
   project: string;
   profiles: Record<string, string[]>;
+  /** The devup release running the daemon, or `'unknown'` if it could not read
+   *  its own manifest. Present from @gachlab/devup >= 0.16.0 — and its absence
+   *  is itself the answer when what you are asking is how old the daemon is. */
+  version?: string;
+  /** Which revision of the wire shapes the daemon speaks. **Check this, not
+   *  `version`**: it answers "can I trust this field" directly, where the
+   *  release number makes us keep our own table of what arrived when — and
+   *  that table is exactly what goes stale. Present from >= 0.16.0. */
+  contract?: number;
+  /** Every RPC the daemon answers. Ask this rather than sending a request and
+   *  looking for `unknown method` in the error. Present from >= 0.16.0. */
+  methods?: string[];
 }
 
 export interface ProxyInfo {

@@ -79,7 +79,7 @@ or at runtime, `devup ctl debug app-api --brk`. The service will not open its ow
 | What you see | What it means |
 |---|---|
 | *"does not run node"* | The service's `cmd` is something else. Debug the browser instead, or invoke node directly. |
-| *"needs @gachlab/devup 0.14.0 or newer"* | The daemon predates the `debug` RPC. |
+| *"needs @gachlab/devup 0.14.0 or newer"* | The daemon predates the `debug` RPC. It cannot tell you which release it is — only 0.16.0 and later report that — but **devup: Show connection details** names the daemon whenever it can. |
 | *"did not come back up under the inspector"* | The restart failed. The daemon rolled the flag back so the service is not left unstartable — check its logs. |
 | *"has not announced an inspector port"* | The process started but Node printed no inspector line. Usually a service that is not really Node, or one still starting. |
 | The session ends on every save | Expected with watch — it should come back on its own. If it does not, the daemon may be older than 0.15.0. |
