@@ -1,7 +1,7 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import { join } from 'node:path';
-import { buildAttachConfig, buildServiceConfigurations, resolveServiceCwd, DEBUG_TYPE, SESSION_PREFIX } from '../../src/debug-config.js';
+import { buildAttachConfig, buildServiceConfigurations, classifyTermination, resolveServiceCwd, DEBUG_TYPE, SESSION_PREFIX } from '../../src/debug-config.js';
 
 describe('buildAttachConfig', () => {
   const config = buildAttachConfig('app-api', 39481, '/w/app/api');
@@ -110,5 +110,32 @@ describe('buildServiceConfigurations', () => {
     const [config] = buildServiceConfigurations(['app-api']);
     assert.ok(config!.name.startsWith(SESSION_PREFIX));
     assert.equal(config!.name.slice(SESSION_PREFIX.length), 'app-api');
+  });
+});
+
+describe('classifyTermination', () => {
+  it('el mismo puerto sigue escuchando: el usuario se desacopló', () => {
+    // Node deja el inspector abierto cuando un cliente se desconecta.
+    assert.equal(classifyTermination(39481, 39481), 'detached');
+  });
+
+  it('otro puerto ya arriba: el servicio reinició y ganó la carrera', () => {
+    // `--inspect=0` reparte un puerto distinto en cada arranque, así que un
+    // número diferente sólo puede ser un proceso nuevo.
+    assert.equal(classifyTermination(39481, 40122), 'restarted');
+  });
+
+  it('sin puerto: aún no se sabe', () => {
+    // El daemon limpia `debugPort` al cerrarse el proceso. Si volverá o no lo
+    // dice el puerto nuevo, cuando aparezca.
+    assert.equal(classifyTermination(39481, null), 'unknown');
+    assert.equal(classifyTermination(39481, undefined), 'unknown');
+  });
+
+  it('no confunde una sesión sin puerto conocido con un desacople', () => {
+    // Si no supimos a qué puerto se acopló la sesión, un puerto vivo no
+    // demuestra que nadie reiniciara.
+    assert.equal(classifyTermination(undefined, 39481), 'restarted');
+    assert.equal(classifyTermination(undefined, null), 'unknown');
   });
 });

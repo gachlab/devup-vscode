@@ -87,3 +87,23 @@ export function buildServiceConfigurations(serviceNames: readonly string[]): Dev
     service,
   }));
 }
+
+/** What the end of a debug session means for the service behind it.
+ *
+ *  `onDidTerminateDebugSession` fires the same whether the service restarted
+ *  or the user detached, so the answer has to come from the inspector port the
+ *  daemon reports. Comparing ports rather than timing is what makes this
+ *  reliable: devup starts a debugged service with `--inspect=0`, so a restart
+ *  always yields a *different* port, while a detach leaves the old one
+ *  listening — Node keeps its inspector open when a client disconnects. */
+export type TerminationCause = 'detached' | 'restarted' | 'unknown';
+
+export function classifyTermination(sessionPort: number | undefined, reportedPort: number | null | undefined): TerminationCause {
+  // Same port still listening: nothing restarted.
+  if (typeof reportedPort === 'number' && reportedPort === sessionPort) return 'detached';
+  // A different port is already up — the restart got here first.
+  if (typeof reportedPort === 'number') return 'restarted';
+  // No port at all: the process is gone or on its way back. Which it is only
+  // becomes clear when (and whether) a new port appears.
+  return 'unknown';
+}
