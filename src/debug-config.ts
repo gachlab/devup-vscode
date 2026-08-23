@@ -58,3 +58,52 @@ export function resolveServiceCwd(svcCwd: string | undefined, workspaceRoot: str
   const cwd = svcCwd.trim();
   return isAbsolute(cwd) ? cwd : join(workspaceRoot, cwd);
 }
+
+/** The debug type this extension contributes.
+ *
+ *  A configuration of this type carries only a service name; everything else —
+ *  asking the daemon to restart it under the inspector, waiting for Node to
+ *  announce a port, resolving the service's directory — happens in
+ *  `resolveDebugConfiguration`, which is allowed to be async and to hand back a
+ *  configuration of a *different* type. VS Code re-runs the resolver chain for
+ *  whatever type comes out, which is how this becomes a plain `node` attach.
+ *  js-debug does the same thing internally (`chrome` → `pwa-chrome`). */
+export const DEBUG_TYPE = 'devup';
+
+export interface DevupDebugConfig {
+  type: typeof DEBUG_TYPE;
+  request: 'attach';
+  name: string;
+  /** The devup service to attach to. Absent means "ask". */
+  service?: string;
+}
+
+/** One entry per service for the Run and Debug dropdown. */
+export function buildServiceConfigurations(serviceNames: readonly string[]): DevupDebugConfig[] {
+  return serviceNames.map(service => ({
+    type: DEBUG_TYPE,
+    request: 'attach' as const,
+    name: `${SESSION_PREFIX}${service}`,
+    service,
+  }));
+}
+
+/** What the end of a debug session means for the service behind it.
+ *
+ *  `onDidTerminateDebugSession` fires the same whether the service restarted
+ *  or the user detached, so the answer has to come from the inspector port the
+ *  daemon reports. Comparing ports rather than timing is what makes this
+ *  reliable: devup starts a debugged service with `--inspect=0`, so a restart
+ *  always yields a *different* port, while a detach leaves the old one
+ *  listening — Node keeps its inspector open when a client disconnects. */
+export type TerminationCause = 'detached' | 'restarted' | 'unknown';
+
+export function classifyTermination(sessionPort: number | undefined, reportedPort: number | null | undefined): TerminationCause {
+  // Same port still listening: nothing restarted.
+  if (typeof reportedPort === 'number' && reportedPort === sessionPort) return 'detached';
+  // A different port is already up — the restart got here first.
+  if (typeof reportedPort === 'number') return 'restarted';
+  // No port at all: the process is gone or on its way back. Which it is only
+  // becomes clear when (and whether) a new port appears.
+  return 'unknown';
+}

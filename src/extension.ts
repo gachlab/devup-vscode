@@ -9,6 +9,7 @@ import { ServicesTreeProvider } from './services-tree.js';
 import { registerServiceCommands } from './commands.js';
 import { registerDaemonCommands } from './daemon-commands.js';
 import { registerDebugCommands } from './debug-commands.js';
+import { DEBUG_TYPE } from './debug-config.js';
 import { ServiceDetailPanels } from './service-detail.js';
 import { ProfilePicker } from './profile-picker.js';
 import { PortForwarder } from './port-forward.js';
@@ -41,6 +42,20 @@ export function activate(context: vscode.ExtensionContext): void {
     // from the activity bar; without this the welcome clauses all evaluate
     // false and it renders blank.
     void vscode.commands.executeCommand('setContext', 'devup.diagnosis', 'noWorkspace');
+    // The `devup` debug type is contributed statically, so it shows up in the
+    // F5 picker even here — and with no resolver registered to rewrite it into
+    // a `node` attach, picking it fails with a raw "Cannot find debug adapter
+    // for type 'devup'". Say what is actually wrong instead.
+    context.subscriptions.push(
+      vscode.debug.registerDebugConfigurationProvider(DEBUG_TYPE, {
+        resolveDebugConfiguration: () => {
+          void vscode.window.showWarningMessage(
+            'devup: open the folder that holds your devup.config.* to debug its services.',
+          );
+          return undefined;
+        },
+      }),
+    );
     return;
   }
 

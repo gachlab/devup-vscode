@@ -1,7 +1,7 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import { join } from 'node:path';
-import { buildAttachConfig, resolveServiceCwd, SESSION_PREFIX } from '../../src/debug-config.js';
+import { buildAttachConfig, buildServiceConfigurations, classifyTermination, resolveServiceCwd, DEBUG_TYPE, SESSION_PREFIX } from '../../src/debug-config.js';
 
 describe('buildAttachConfig', () => {
   const config = buildAttachConfig('app-api', 39481, '/w/app/api');
@@ -81,5 +81,61 @@ describe('SESSION_PREFIX', () => {
     // attaching twice to an inspector that serves one debugger at a time.
     assert.ok(buildAttachConfig('app-api', 1, '/w').name.startsWith(SESSION_PREFIX));
     assert.equal(buildAttachConfig('app-api', 1, '/w').name.slice(SESSION_PREFIX.length), 'app-api');
+  });
+});
+
+describe('buildServiceConfigurations', () => {
+  it('da una entrada por servicio, con su nombre de sesión', () => {
+    const configs = buildServiceConfigurations(['app-api', 'app-web']);
+    assert.deepEqual(configs.map(c => c.service), ['app-api', 'app-web']);
+    assert.deepEqual(configs.map(c => c.name), ['devup: app-api', 'devup: app-web']);
+  });
+
+  it('las marca del tipo que resuelve la extensión, no node', () => {
+    // El resolver es quien convierte esto en un attach de node, después de
+    // pedirle al daemon que reinicie el servicio bajo el inspector. Nacer como
+    // `node` saltaría ese paso y apuntaría a un puerto que aún no existe.
+    const [config] = buildServiceConfigurations(['app-api']);
+    assert.equal(config!.type, DEBUG_TYPE);
+    assert.equal(config!.request, 'attach');
+  });
+
+  it('no inventa entradas cuando no hay servicios', () => {
+    assert.deepEqual(buildServiceConfigurations([]), []);
+  });
+
+  it('el nombre lleva el prefijo por el que la extensión reconoce sus sesiones', () => {
+    // De esto depende el re-acople: `onDidTerminateDebugSession` sólo trae el
+    // nombre de la sesión.
+    const [config] = buildServiceConfigurations(['app-api']);
+    assert.ok(config!.name.startsWith(SESSION_PREFIX));
+    assert.equal(config!.name.slice(SESSION_PREFIX.length), 'app-api');
+  });
+});
+
+describe('classifyTermination', () => {
+  it('el mismo puerto sigue escuchando: el usuario se desacopló', () => {
+    // Node deja el inspector abierto cuando un cliente se desconecta.
+    assert.equal(classifyTermination(39481, 39481), 'detached');
+  });
+
+  it('otro puerto ya arriba: el servicio reinició y ganó la carrera', () => {
+    // `--inspect=0` reparte un puerto distinto en cada arranque, así que un
+    // número diferente sólo puede ser un proceso nuevo.
+    assert.equal(classifyTermination(39481, 40122), 'restarted');
+  });
+
+  it('sin puerto: aún no se sabe', () => {
+    // El daemon limpia `debugPort` al cerrarse el proceso. Si volverá o no lo
+    // dice el puerto nuevo, cuando aparezca.
+    assert.equal(classifyTermination(39481, null), 'unknown');
+    assert.equal(classifyTermination(39481, undefined), 'unknown');
+  });
+
+  it('no confunde una sesión sin puerto conocido con un desacople', () => {
+    // Si no supimos a qué puerto se acopló la sesión, un puerto vivo no
+    // demuestra que nadie reiniciara.
+    assert.equal(classifyTermination(undefined, 39481), 'restarted');
+    assert.equal(classifyTermination(undefined, null), 'unknown');
   });
 });

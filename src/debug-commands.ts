@@ -2,7 +2,7 @@ import * as vscode from 'vscode';
 import { sendRpc, RpcCallError } from './socket-client.js';
 import type { StatusStore } from './status-store.js';
 import { extractSvcName } from './svc-name.js';
-import { buildAttachConfig, resolveServiceCwd, SESSION_PREFIX } from './debug-config.js';
+import { buildAttachConfig, buildServiceConfigurations, classifyTermination, resolveServiceCwd, DEBUG_TYPE, SESSION_PREFIX } from './debug-config.js';
 
 /** Debugging a service used to mean stopping it in devup, running it by hand
  *  outside, and giving up watch, health checks and restarts while you did
@@ -12,6 +12,11 @@ import { buildAttachConfig, resolveServiceCwd, SESSION_PREFIX } from './debug-co
  *  The flag lives on the service in the daemon's state, so it survives the
  *  crash-and-restart that usually prompts a debugging session — and outlives
  *  the session too, which is why turning it back off is a command of its own. */
+
+/** How long to wait for the store's first snapshot before answering with the
+ *  list of services. Short: a dropdown that lags is worse than one that is
+ *  briefly empty. */
+const SERVICES_WAIT_MS = 3_000;
 
 /** How long to wait for Node to announce its inspector port after the restart.
  *  The RPC returns as soon as the service is up, which is typically before the
@@ -23,6 +28,11 @@ const PORT_WAIT_MS = 15_000;
  *  default would give up on a restart that is going fine, leaving the service
  *  under the inspector with the user told it failed. */
 const DEBUG_RPC_TIMEOUT_MS = 120_000;
+
+/** How long to let the status stream catch up after a debug session ends,
+ *  before deciding what happened. Only a nudge — the decision itself does not
+ *  depend on this having been long enough. */
+const TERMINATE_SETTLE_MS = 500;
 
 interface DebugResult {
   debug: boolean;
@@ -44,6 +54,51 @@ function isDebugResult(value: unknown): value is DebugResult {
  *  that merely happens to be falsy. */
 type Attempt<T> = { ok: true; value: T } | { ok: false };
 
+/** Leaves the service running under the inspector and returns the port to
+ *  attach to, or null when it could not — having already told the user why.
+ *
+ *  Shared by the command and the debug-configuration provider so that F5 and
+ *  the context menu cannot drift apart. */
+async function ensureInspector(
+  store: StatusStore,
+  socketPath: () => string,
+  svcName: string,
+): Promise<number | null> {
+  // Already under the inspector: a service declared `debug: true` in the
+  // config comes up that way, and a watch-triggered restart leaves it debugged
+  // on a new port. Restarting it again would throw away the state the user is
+  // here to look at.
+  const live = store.getAll().find(s => s.name === svcName);
+  if (typeof live?.debugPort === 'number') return live.debugPort;
+
+  const attempt = await withProgress(`devup: restarting "${svcName}" under the inspector…`, async () =>
+    // Not pre-checked against `cmd`: the daemon decides what it can inspect,
+    // and its refusal ("does not run node") is the better message.
+    await sendRpc(socketPath(), 'debug', { svc: svcName, enable: true },
+      { timeoutMs: DEBUG_RPC_TIMEOUT_MS }),
+  );
+  if (!attempt.ok) return null;
+  const result = attempt.value;
+
+  if (!result.ok) {
+    // The daemon rolls the flag back when the restart fails, so the service is
+    // not left unstartable — but it is also not running.
+    void vscode.window.showErrorMessage(
+      `devup: "${svcName}" did not come back up under the inspector. The debug flag was rolled back; check its logs.`,
+    );
+    return null;
+  }
+
+  const port = result.port ?? await waitForDebugPort(store, svcName);
+  if (port === null) {
+    void vscode.window.showWarningMessage(
+      `devup: "${svcName}" restarted, but Node has not announced an inspector port. `
+      + 'It may not be a Node process, or it may still be starting.',
+    );
+  }
+  return port;
+}
+
 export function registerDebugCommands(
   context: vscode.ExtensionContext,
   store: StatusStore,
@@ -57,14 +112,124 @@ export function registerDebugCommands(
   // command twice on the same service produces a raw adapter connection error.
   // The stable API exposes no list of sessions, so we keep our own.
   const attached = new Set<string>();
+  /** Services the user asked to debug and has not asked to stop. Survives the
+   *  session ending, which is the whole point: a watch-triggered restart kills
+   *  the session, and the inspector comes back on a *different* port. */
+  const wanted = new Set<string>();
+  /** Port each live session attached to, so a terminate can be classified by
+   *  comparing ports rather than by guessing from timing. */
+  const sessionPort = new Map<string, number>();
+  /** Services with a re-attach in flight. */
+  const reattaching = new Set<string>();
+
   context.subscriptions.push(
     vscode.debug.onDidStartDebugSession(session => {
       const name = sessionServiceName(session.name);
-      if (name) attached.add(name);
+      if (!name) return;
+      attached.add(name);
+      const port = (session.configuration as { port?: unknown }).port;
+      if (typeof port === 'number') sessionPort.set(name, port);
     }),
     vscode.debug.onDidTerminateDebugSession(session => {
       const name = sessionServiceName(session.name);
-      if (name) attached.delete(name);
+      if (!name) return;
+      attached.delete(name);
+      const port = sessionPort.get(name);
+      sessionPort.delete(name);
+      void considerReattach(name, port);
+    }),
+  );
+
+  /** A session ended. Was it the service restarting, or the user detaching?
+   *
+   *  `onDidTerminateDebugSession` fires the same either way, so the answer
+   *  comes from the daemon: it clears `debugPort` when the process closes, and
+   *  leaves it alone when a debugger merely disconnects. */
+  async function considerReattach(svcName: string, lastPort: number | undefined): Promise<void> {
+    if (!wanted.has(svcName) || reattaching.has(svcName)) return;
+    reattaching.add(svcName);
+    try {
+      // Nudge only: the decision below compares ports, so it does not depend
+      // on this window having been long enough.
+      await new Promise(r => setTimeout(r, TERMINATE_SETTLE_MS));
+      const current = store.getAll().find(s => s.name === svcName)?.debugPort;
+      const cause = classifyTermination(lastPort, current);
+      if (cause === 'detached') {
+        wanted.delete(svcName);
+        return;
+      }
+
+      const next = cause === 'restarted'
+        ? current as number
+        : await waitForDebugPort(store, svcName, lastPort);
+      if (!wanted.has(svcName) || attached.has(svcName)) return;
+      if (next === null) {
+        // Nothing will re-trigger this — the trigger was a session ending and
+        // there is no session now — so say so rather than going quiet.
+        wanted.delete(svcName);
+        void vscode.window.showWarningMessage(
+          `devup: "${svcName}" has not announced a new inspector port, so the debug session was not restored. `
+          + 'Run `devup: Debug service (attach)` when it is back.',
+        );
+        return;
+      }
+      const svc = store.getAll().find(s => s.name === svcName);
+      void vscode.window.setStatusBarMessage(`devup: re-attaching to "${svcName}" on :${next}`, 4000);
+      await attach(svcName, next, svc?.cwd, workspaceRoot(), folder());
+    } finally {
+      reattaching.delete(svcName);
+    }
+  }
+
+  // ── Configurations, so F5 and the Run and Debug dropdown work ────────────
+  //
+  // Registered `Dynamic`, which is what puts entries in the dropdown without a
+  // launch.json. `resolveDebugConfiguration` may hand back a configuration of
+  // a different type: the editor re-runs the resolver chain for whatever type
+  // comes out, which is how a `devup` configuration becomes a `node` attach.
+  context.subscriptions.push(
+    vscode.debug.registerDebugConfigurationProvider(DEBUG_TYPE, {
+      provideDebugConfigurations: async () => {
+        // La activación puede venir *de* este proveedor, y `StatusStore` abre
+        // con una sonda de 2 s: contestar en ese instante devolvería una lista
+        // vacía y el usuario vería el desplegable sin nada.
+        await waitForServices(store, SERVICES_WAIT_MS);
+        return buildServiceConfigurations(store.getAll().map(s => s.name).sort());
+      },
+    }, vscode.DebugConfigurationProviderTriggerKind.Dynamic),
+
+    vscode.debug.registerDebugConfigurationProvider(DEBUG_TYPE, {
+      resolveDebugConfiguration: async (_folder, config) => {
+        const svcName = typeof config['service'] === 'string' && config['service']
+          ? config['service']
+          : await pickService(undefined, store, 'Debug which service?');
+        // Returning undefined aborts without opening launch.json, which is
+        // right for "the user cancelled the picker" and for every failure
+        // `ensureInspector` has already reported.
+        if (!svcName) return undefined;
+        if (attached.has(svcName)) {
+          void vscode.window.showInformationMessage(`devup: already debugging "${svcName}".`);
+          return undefined;
+        }
+        if (reattaching.has(svcName)) {
+          // Sin esto, un F5 impaciente durante un rebuild llega a
+          // `ensureInspector` sin puerto vivo, manda `debug {enable:true}` y el
+          // daemon reinicia el servicio otra vez — tirando justo el estado que
+          // el re-acople existe para conservar.
+          void vscode.window.showInformationMessage(
+            `devup: "${svcName}" is restarting; the session will come back on its own.`,
+          );
+          return undefined;
+        }
+
+        const port = await ensureInspector(store, socketPath, svcName);
+        if (port === null) return undefined;
+
+        const svc = store.getAll().find(s => s.name === svcName);
+        const cwd = resolveServiceCwd(svc?.cwd, workspaceRoot()) ?? workspaceRoot();
+        wanted.add(svcName);
+        return buildAttachConfig(svcName, port, cwd) as unknown as vscode.DebugConfiguration;
+      },
     }),
   );
 
@@ -73,50 +238,24 @@ export function registerDebugCommands(
       const svcName = await pickService(arg, store, 'Debug which service?');
       if (!svcName) return;
 
-      // Already under the inspector: a service declared `debug: true` in the
-      // config comes up that way, and a watch-triggered restart ends the
-      // session while leaving the service debugged on a new port. Restarting
-      // it again would throw away the state the user is here to look at.
       if (attached.has(svcName)) {
         void vscode.window.showInformationMessage(`devup: already debugging "${svcName}".`);
         return;
       }
-
-      const live = store.getAll().find(s => s.name === svcName);
-      if (typeof live?.debugPort === 'number') {
-        await attach(svcName, live.debugPort, live.cwd, workspaceRoot(), folder());
-        return;
+      // Through startDebugging rather than attaching directly, so the command
+      // and F5 take the same path: the provider below does the work.
+      try {
+        const started = await vscode.debug.startDebugging(folder(), {
+          type: DEBUG_TYPE, request: 'attach', name: `${SESSION_PREFIX}${svcName}`, service: svcName,
+        });
+        // False also means "the resolver declined", which it does after
+        // reporting the reason itself — hence no message of our own here
+        // beyond the case where nothing was said at all.
+        if (!started && !reattaching.has(svcName)) return;
+      } catch (e) {
+        const message = e instanceof Error ? e.message : String(e);
+        void vscode.window.showErrorMessage(`devup: could not start debugging "${svcName}" — ${message}`);
       }
-
-      const attempt = await withProgress(`devup: restarting "${svcName}" under the inspector…`, async () =>
-        // Not pre-checked against `cmd`: the daemon decides what it can
-        // inspect, and its refusal ("does not run node") is the better message.
-        await sendRpc(socketPath(), 'debug', { svc: svcName, enable: true },
-          { timeoutMs: DEBUG_RPC_TIMEOUT_MS }),
-      );
-      if (!attempt.ok) return;
-      const result = attempt.value;
-
-      if (!result.ok) {
-        // The daemon rolls the flag back when the restart fails, so the service
-        // is not left unstartable — but it is also not running.
-        void vscode.window.showErrorMessage(
-          `devup: "${svcName}" did not come back up under the inspector. The debug flag was rolled back; check its logs.`,
-        );
-        return;
-      }
-
-      const port = result.port ?? await waitForDebugPort(store, svcName);
-      if (port === null) {
-        void vscode.window.showWarningMessage(
-          `devup: "${svcName}" restarted, but Node has not announced an inspector port. `
-          + 'It may not be a Node process, or it may still be starting.',
-        );
-        return;
-      }
-
-      const svc = store.getAll().find(s => s.name === svcName);
-      await attach(svcName, port, svc?.cwd, workspaceRoot(), folder());
     }),
 
     vscode.commands.registerCommand('devup.stopDebugging', async (arg?: string | Record<string, unknown>) => {
@@ -129,6 +268,9 @@ export function registerDebugCommands(
       // still set, and every restart brings `--inspect` back with it.
       const svcName = await pickService(arg, store, 'Stop debugging which service?');
       if (!svcName) return;
+      // Before the RPC: the restart it triggers would otherwise look like a
+      // service coming back and pull us into re-attaching.
+      wanted.delete(svcName);
 
       const attempt = await withProgress(`devup: restarting "${svcName}" without the inspector…`, async () =>
         await sendRpc(socketPath(), 'debug', { svc: svcName, enable: false },
@@ -179,9 +321,10 @@ async function withProgress(title: string, run: () => Promise<unknown>): Promise
  *  `debug` returns as soon as the service is up, which is normally before Node
  *  has printed "Debugger listening on ws://…" — the daemon parses that out of
  *  stderr and publishes it as `debugPort` on the next status frame. */
-function waitForDebugPort(store: StatusStore, svcName: string): Promise<number | null> {
+function waitForDebugPort(store: StatusStore, svcName: string, not?: number): Promise<number | null> {
+  const usable = (p: unknown): p is number => typeof p === 'number' && p !== not;
   const current = store.getAll().find(s => s.name === svcName)?.debugPort;
-  if (typeof current === 'number') return Promise.resolve(current);
+  if (usable(current)) return Promise.resolve(current);
 
   return new Promise(resolve => {
     let done = false;
@@ -195,7 +338,7 @@ function waitForDebugPort(store: StatusStore, svcName: string): Promise<number |
     const timer = setTimeout(() => finish(null), PORT_WAIT_MS);
     const sub = store.onDidChange(() => {
       const port = store.getAll().find(s => s.name === svcName)?.debugPort;
-      if (typeof port === 'number') finish(port);
+      if (usable(port)) finish(port);
     });
   });
 }
@@ -223,6 +366,17 @@ async function attach(
     const message = e instanceof Error ? e.message : String(e);
     void vscode.window.showErrorMessage(`devup: could not attach to "${svcName}" on port ${port} — ${message}`);
   }
+}
+
+/** Resolves once the store has services, or when the wait runs out. */
+function waitForServices(store: StatusStore, timeoutMs: number): Promise<void> {
+  if (store.getAll().length) return Promise.resolve();
+  return new Promise(resolve => {
+    let done = false;
+    const finish = () => { if (done) return; done = true; clearTimeout(timer); sub.dispose(); resolve(); };
+    const timer = setTimeout(finish, timeoutMs);
+    const sub = store.onDidChange(() => { if (store.getAll().length) finish(); });
+  });
 }
 
 async function pickService(

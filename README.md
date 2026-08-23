@@ -39,6 +39,8 @@ Talks to a running devup daemon via its Unix-socket control plane — no separat
 | Open a service's log file, and reveal the logs folder | 0.8.0 |
 | Forwarded ports marked in the tree, with a prompt to close them when the daemon goes | 0.8.0 |
 | Attach a debugger to a service, without taking it out of devup (needs devup ≥ 0.14.0) | 0.8.0 |
+| F5 and the Run and Debug dropdown, one entry per service — no launch.json | 0.9.0 |
+| Re-attaches on its own when a watch restart moves the inspector port | 0.9.0 |
 | Resolves local `node_modules` devup before global install | 0.2.1 |
 
 ## How it works
