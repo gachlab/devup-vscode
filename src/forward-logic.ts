@@ -104,3 +104,43 @@ export function reactToState(input: ForwardReactionInput): ForwardReaction {
   if (next !== 'unreachable' || input.restartExpected) return 'none';
   return input.remote && input.hasRequested ? 'warn' : 'none';
 }
+
+/** What the editor actually did with a forwarded port, when it is not what we
+ *  asked for — or null when the address works as the app expects.
+ *
+ *  `asExternalUri` returns the resolved uri and `PortForwarder` drops it on
+ *  purpose: the docs warn that a resolved uri goes stale the moment the user
+ *  closes the tunnel, so caching one is a bug. Reading it once on the way past
+ *  is not caching — and it carries the one thing worth knowing, which is
+ *  whether the port survived.
+ *
+ *  It matters because an app that hardcodes `http://localhost:3000` — the
+ *  normal shape of a frontend calling its API — reaches nothing when the
+ *  editor had to bind 3001 instead, and nothing on screen explains why. */
+export interface Remap {
+  /** `port` is one port moving; `hosted` is the editor not binding local ports
+   *  at all, which is the normal state in Codespaces and Remote Tunnels — and
+   *  therefore something to say once, not once per service. */
+  kind: 'port' | 'hosted';
+  text: string;
+}
+
+export function describeRemap(requestedPort: number, resolved: { authority: string; scheme: string }): Remap | null {
+  const [host, portText] = splitAuthority(resolved.authority);
+  const isLocal = host === 'localhost' || host === '127.0.0.1' || host === '[::1]';
+  const port = Number(portText);
+
+  if (isLocal && (!portText || port === requestedPort)) return null;
+  if (isLocal) {
+    return { kind: 'port', text: `is reachable at localhost:${port}, not localhost:${requestedPort}` };
+  }
+  // Codespaces and Remote Tunnels publish to a hosted address instead of
+  // binding a local port at all.
+  return { kind: 'hosted', text: `is published at ${resolved.scheme}://${resolved.authority}, not on a local port` };
+}
+
+function splitAuthority(authority: string): [string, string] {
+  // IPv6 authorities are `[::1]:3000`.
+  const match = /^(\[[^\]]*\]|[^:]*)(?::(\d+))?$/.exec(authority);
+  return [match?.[1] ?? authority, match?.[2] ?? ''];
+}

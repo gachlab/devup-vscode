@@ -41,6 +41,7 @@ Talks to a running devup daemon via its Unix-socket control plane — no separat
 | Attach a debugger to a service, without taking it out of devup (needs devup ≥ 0.14.0) | 0.8.0 |
 | F5 and the Run and Debug dropdown, one entry per service — no launch.json | 0.9.0 |
 | Re-attaches on its own when a watch restart moves the inspector port | 0.9.0 |
+| Warns when the editor remaps a forwarded port, which breaks hardcoded API URLs | 0.9.0 |
 | Resolves local `node_modules` devup before global install | 0.2.1 |
 
 ## How it works

@@ -1,6 +1,6 @@
 import * as vscode from 'vscode';
 import type { StatusStore } from './status-store.js';
-import { isPortIgnored, parseForwardMode, reactToState, selectForwardPorts, type ForwardMode } from './forward-logic.js';
+import { canonicalPort, describeRemap, isPortIgnored, parseForwardMode, reactToState, selectForwardPorts, type ForwardMode } from './forward-logic.js';
 
 /** Asks the editor to tunnel devup service ports back to the local machine.
  *
@@ -38,6 +38,14 @@ export class PortForwarder implements vscode.Disposable {
   /** Fires when the set of forwarded ports changes. */
   readonly onDidChangeForwarded = this.changeEmitter.event;
   private lastState: string | null = null;
+  /** Ports already reported as remapped. The warning is worth saying once, not
+   *  every 30 s. Cleared when the daemon comes back, since the port set — and
+   *  what the editor could bind — may be different by then. */
+  private readonly remapWarned = new Set<number>();
+  /** The hosted case is not per port: in Codespaces *every* port resolves that
+   *  way, so warning per service would stack one toast per web app describing
+   *  a situation nobody can change. */
+  private hostedWarned = false;
   /** Set by `devup: Close forwarded ports…`. The editor's picker is the only
    *  way to close a tunnel, and it does not tell us which ones went — so
    *  re-asserting on the 30 s timer would silently re-open everything the user
@@ -111,6 +119,13 @@ export class PortForwarder implements vscode.Disposable {
     const state = this.store.getState();
     const previous = this.lastState;
     this.lastState = state;
+    if (previous !== 'connected' && state === 'connected') {
+      // A fresh daemon can land on different ports, and the editor can bind
+      // them differently — so a warning already shown may no longer be true,
+      // and the one that now applies has not been shown.
+      this.remapWarned.clear();
+      this.hostedWarned = false;
+    }
     const reaction = reactToState({
       previous,
       next: state,
@@ -132,6 +147,44 @@ export class PortForwarder implements vscode.Disposable {
       'Close forwarded ports…',
     ).then(choice => {
       if (choice) void vscode.commands.executeCommand('devup.closeForwardedPorts');
+    });
+  }
+
+  /** An app that hardcodes `http://localhost:<port>` — which is how a frontend
+   *  usually calls its API — reaches nothing when the editor had to bind a
+   *  different port, and nothing on screen says so. The Ports view knows; it
+   *  is just not where anyone is looking. */
+  private reportRemap(port: number, resolved: vscode.Uri): void {
+    const what = describeRemap(port, resolved);
+    if (!what) return;
+    if (what.kind === 'hosted') {
+      if (this.hostedWarned) return;
+      this.hostedWarned = true;
+    } else {
+      if (this.remapWarned.has(port)) return;
+      this.remapWarned.add(port);
+    }
+    const services = this.store.getAll()
+      .filter(s => canonicalPort(s) === port)
+      .map(s => `"${s.name}"`)
+      .join(', ');
+    const subject = what.kind === 'hosted'
+      ? 'this window forwards ports to hosted addresses, so every service'
+      : `${services || `port ${port}`}`;
+    void vscode.window.showWarningMessage(
+      `devup: ${subject} ${what.text}. `
+      + 'Anything calling the original port directly — a frontend hardcoding its API URL — will not reach it.',
+      'Show Ports',
+    ).then(async choice => {
+      if (!choice) return;
+      // The Ports view lives in the Remote Explorer container. Guarded like
+      // the other editor commands this extension borrows: which of them exist
+      // depends on the editor build.
+      try {
+        await vscode.commands.executeCommand('workbench.view.remote');
+      } catch {
+        void vscode.window.showInformationMessage('devup: open the Ports view from the panel to see the addresses.');
+      }
     });
   }
 
@@ -165,7 +218,10 @@ export class PortForwarder implements vscode.Disposable {
         // Result deliberately dropped rather than cached: the editor may hand
         // back a different local port, and a cached uri goes stale the moment
         // the user closes the tunnel. The Ports view is the source of truth.
-        await vscode.env.asExternalUri(vscode.Uri.parse(`http://localhost:${port}`));
+        const resolved = await vscode.env.asExternalUri(vscode.Uri.parse(`http://localhost:${port}`));
+        // Read, not cached: what goes stale is the uri, and it is still
+        // dropped. What is kept is the answer to "did the port survive?".
+        this.reportRemap(port, resolved);
         if (!this.requested.has(port)) { this.requested.add(port); changed = true; }
       } catch {
         // Transient — port not bound yet, or the resolver is busy mid-reconnect.
