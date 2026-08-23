@@ -118,6 +118,15 @@
           "default": 1024,
           "description": "Memory (MB) threshold for red (critical) icon on service tree items."
         },
+        "devup.debug.browser": {
+          "type": "string",
+          "enum": [
+            "chrome",
+            "msedge"
+          ],
+          "default": "chrome",
+          "description": "Browser to launch for 'Debug the stack'. In a remote window the editor launches it on your local machine and tunnels the debug port back."
+        },
         "devup.logDir": {
           "type": "string",
           "default": "",
@@ -268,6 +277,11 @@
         "icon": "$(debug-alt)"
       },
       {
+        "command": "devup.debugStack",
+        "title": "devup: Debug the stack (browser + services)",
+        "icon": "$(debug-all)"
+      },
+      {
         "command": "devup.stopDebugging",
         "title": "devup: Stop debugging service",
         "icon": "$(debug-disconnect)"
@@ -324,6 +338,11 @@
           "command": "devup.daemon.stop",
           "when": "view == devupServices && devup.daemonReachable",
           "group": "navigation@2"
+        },
+        {
+          "command": "devup.debugStack",
+          "when": "view == devupServices && devup.daemonReachable",
+          "group": "1_devup@0"
         },
         {
           "command": "devup.revealLogs",

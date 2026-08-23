@@ -107,3 +107,51 @@ export function classifyTermination(sessionPort: number | undefined, reportedPor
   // becomes clear when (and whether) a new port appears.
   return 'unknown';
 }
+
+/** The browser half of a stack session.
+ *
+ *  In a remote window js-debug launches the browser on the *local* machine
+ *  through its bundled companion extension and tunnels the debug port back —
+ *  no configuration needed here, and `debug.javascript.automaticallyTunnelRemoteServer`
+ *  (on by default) opens the tunnel to the dev server too.
+ *
+ *  `cascadeTerminateToConfigurations` is what makes this feel like one thing:
+ *  closing the browser ends the API sessions with it. Note it ends the debug
+ *  *sessions*, not the services — devup keeps running them, which is the whole
+ *  point of attaching rather than launching. */
+export interface BrowserDebugConfig {
+  type: 'chrome' | 'msedge';
+  request: 'launch';
+  name: string;
+  url: string;
+  webRoot: string;
+  sourceMaps: boolean;
+  cascadeTerminateToConfigurations: string[];
+}
+
+export function buildBrowserConfig(
+  svcName: string,
+  url: string,
+  webRoot: string,
+  alsoTerminate: readonly string[],
+  browser: 'chrome' | 'msedge' = 'chrome',
+): BrowserDebugConfig {
+  return {
+    type: browser,
+    request: 'launch',
+    name: `${SESSION_PREFIX}${svcName} (browser)`,
+    url,
+    // Where the sources the browser loads live on disk, so a breakpoint in a
+    // .ts of the frontend binds. The service's own directory, not the
+    // workspace root: in a monorepo those are not the same place.
+    webRoot,
+    sourceMaps: true,
+    cascadeTerminateToConfigurations: [...alsoTerminate],
+  };
+}
+
+/** Reads the browser preference, defaulting to Chrome. Anything unexpected
+ *  falls back rather than reaching js-debug as an unknown debug type. */
+export function parseBrowser(raw: unknown): 'chrome' | 'msedge' {
+  return raw === 'msedge' ? 'msedge' : 'chrome';
+}

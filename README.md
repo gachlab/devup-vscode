@@ -42,6 +42,7 @@ Talks to a running devup daemon via its Unix-socket control plane — no separat
 | F5 and the Run and Debug dropdown, one entry per service — no launch.json | 0.9.0 |
 | Re-attaches on its own when a watch restart moves the inspector port | 0.9.0 |
 | Warns when the editor remaps a forwarded port, which breaks hardcoded API URLs | 0.9.0 |
+| Debug the stack — browser plus any services, in one session that closes together | 0.9.0 |
 | Resolves local `node_modules` devup before global install | 0.2.1 |
 
 ## How it works
@@ -62,6 +63,7 @@ All data (service status, health, phase, profiles) comes exclusively from the da
 | `devup.executablePath` | `""` | Path to the `devup` binary. Empty = use `npx devup` (local `node_modules` first, then global). |
 | `devup.treeView.groupBy` | `"type"` | How to group services: `"type"` (APIs / Webs), `"phase"` (phase 0, phase 1, …), or `"none"` (flat list). |
 | `devup.profile` | `""` | Active profile filter. When set, only services in that profile are shown. Empty = all services. |
+| `devup.debug.browser` | `"chrome"` | Browser launched by "Debug the stack". In a remote window the editor launches it on your local machine and tunnels the debug port back. |
 | `devup.logDir` | `""` | Root of devup's log directory, when the daemon runs with `--log-dir`. Empty = `~/.devup/logs`. The daemon does not publish this, so it has to be repeated here for "Open log file" to find anything. |
 
 ## Requirements

@@ -1,7 +1,7 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import { join } from 'node:path';
-import { buildAttachConfig, buildServiceConfigurations, classifyTermination, resolveServiceCwd, DEBUG_TYPE, SESSION_PREFIX } from '../../src/debug-config.js';
+import { buildAttachConfig, buildBrowserConfig, buildServiceConfigurations, classifyTermination, parseBrowser, resolveServiceCwd, DEBUG_TYPE, SESSION_PREFIX } from '../../src/debug-config.js';
 
 describe('buildAttachConfig', () => {
   const config = buildAttachConfig('app-api', 39481, '/w/app/api');
@@ -137,5 +137,56 @@ describe('classifyTermination', () => {
     // demuestra que nadie reiniciara.
     assert.equal(classifyTermination(undefined, 39481), 'restarted');
     assert.equal(classifyTermination(undefined, null), 'unknown');
+  });
+});
+
+describe('buildBrowserConfig', () => {
+  const config = buildBrowserConfig('app-web', 'http://localhost:4201', '/w/app/web', ['devup: app-api']);
+
+  it('lanza el navegador contra la URL del servicio', () => {
+    assert.equal(config.request, 'launch');
+    assert.equal(config.url, 'http://localhost:4201');
+  });
+
+  it('enraíza los source maps en la carpeta del web, no en la del monorepo', () => {
+    // Un breakpoint en un .ts del front sólo liga si webRoot apunta a donde
+    // están sus fuentes.
+    assert.equal(config.webRoot, '/w/app/web');
+    assert.equal(config.sourceMaps, true);
+  });
+
+  it('arrastra las sesiones de los APIs al cerrarse', () => {
+    // Es lo único que hace que esto se sienta como una sola cosa: no hay API
+    // de compounds, sólo se puede lanzar por nombre uno ya escrito a mano en
+    // launch.json.
+    assert.deepEqual(config.cascadeTerminateToConfigurations, ['devup: app-api']);
+  });
+
+  it('no arrastra nada si no se acopló a ningún API', () => {
+    assert.deepEqual(buildBrowserConfig('app-web', 'http://x', '/w', []).cascadeTerminateToConfigurations, []);
+  });
+
+  it('usa chrome por defecto y edge cuando se pide', () => {
+    assert.equal(config.type, 'chrome');
+    assert.equal(buildBrowserConfig('a', 'http://x', '/w', [], 'msedge').type, 'msedge');
+  });
+
+  it('nombra la sesión con el prefijo de la extensión', () => {
+    assert.ok(config.name.startsWith(SESSION_PREFIX));
+  });
+});
+
+describe('parseBrowser', () => {
+  it('acepta los dos navegadores que js-debug trae', () => {
+    assert.equal(parseBrowser('chrome'), 'chrome');
+    assert.equal(parseBrowser('msedge'), 'msedge');
+  });
+
+  it('cae a chrome ante cualquier otra cosa', () => {
+    // Un valor inesperado llegaría a js-debug como un tipo de depurador que no
+    // existe, y el error sería "Cannot find debug adapter".
+    assert.equal(parseBrowser('firefox'), 'chrome');
+    assert.equal(parseBrowser(undefined), 'chrome');
+    assert.equal(parseBrowser(42), 'chrome');
   });
 });

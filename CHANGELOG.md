@@ -8,6 +8,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **`devup: Debug the stack`** (#54) — opens the frontend in a debugged browser and attaches to whichever services you pick, in one go, with the API breakpoints bound *before* the page loads and starts calling them. Closing the browser ends the whole thing; the services keep running, which is the point of attaching rather than launching.
+
+  In a remote window the browser is launched on your local machine: js-debug does that through its bundled companion and tunnels the debug port back, with no configuration from us. `devup.debug.browser` picks Chrome or Edge.
+
+  What this does **not** do, because VS Code cannot: step from the frontend into the server across an HTTP call. The two ends are separate sessions that pause independently — you set a breakpoint on each side and the Call Stack switches between them. There is no cross-process step-into for a network hop in js-debug, and the Network view it does have is per session and purely observational.
 - **Says when the editor remapped a forwarded port** (#55). The Ports view has always known; it is just not where anyone is looking. If port 3000 is already taken on your machine the editor binds 3001 instead, and an app that hardcodes `http://localhost:3000` — the ordinary shape of a frontend calling its API — reaches nothing, with nothing on screen to explain it. The extension now names the service, both ports, and offers to open the Ports view. Same for Codespaces and Remote Tunnels, which publish to a hosted address instead of binding a local port at all.
 
   This does not cache the resolved uri, which the API docs are explicit about: what goes stale is the uri, and it is still dropped. What is read on the way past is the answer to "did the port survive?".
