@@ -37,6 +37,14 @@ function rediscoverDebounceMs(): number {
 }
 
 export function activate(context: vscode.ExtensionContext): void {
+  // Before anything can bail out: this is the one command whose whole purpose
+  // is "I do not have this set up yet", and the walkthrough it opens is
+  // contributed in every window, folder or not.
+  context.subscriptions.push(
+    vscode.commands.registerCommand('devup.openWalkthrough', () =>
+      vscode.commands.executeCommand('workbench.action.openWalkthrough', 'gachlab.devup-vscode#devup.debugging', false)),
+  );
+
   const initial = discoverWorkspace();
   if (!initial) {
     // No folder open. The view is contributed statically, so it is reachable
@@ -223,10 +231,6 @@ export function activate(context: vscode.ExtensionContext): void {
     });
   }));
 
-  context.subscriptions.push(
-    vscode.commands.registerCommand('devup.openWalkthrough', () =>
-      vscode.commands.executeCommand('workbench.action.openWalkthrough', 'gachlab.devup-vscode#devup.debugging', false)),
-  );
 
   // ── Re-discovery ─────────────────────────────────────────────────────────
   // Discovery used to run once, at activation, so renaming a project moved its

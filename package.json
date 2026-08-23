@@ -164,8 +164,7 @@
             "id": "devup.walkthrough.f5",
             "title": "Or just press F5",
             "description": "One entry per service in the Run and Debug picker, with no launch.json — and no port written down, because it changes on every restart.\n[Open Run and Debug](command:workbench.view.debug)",
-            "media": { "markdown": "media/walkthrough/03-f5.md" },
-            "completionEvents": ["onCommand:workbench.view.debug"]
+            "media": { "markdown": "media/walkthrough/03-f5.md" }
           },
           {
             "id": "devup.walkthrough.stack",

@@ -43,7 +43,7 @@ Talks to a running devup daemon via its Unix-socket control plane — no separat
 | Re-attaches on its own when a watch restart moves the inspector port | 0.9.0 |
 | Warns when the editor remaps a forwarded port, which breaks hardcoded API URLs | 0.9.0 |
 | Debug the stack — browser plus any services, in one session that closes together | 0.9.0 |
-| Walkthrough and reference docs for all of the above | 0.9.1 |
+| Walkthrough and reference docs for all of the above | 0.10.0 |
 | Resolves local `node_modules` devup before global install | 0.2.1 |
 
 ## Debugging
