@@ -5,7 +5,9 @@ All notable changes to the devup VS Code extension are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [0.9.0] — 2026-08-22
+
+Depuración de verdad desde el editor: F5 por servicio, el stack entero — navegador incluido — en una sola sesión, y re-acople cuando el watch reinicia.
 
 ### Added
 - **`devup: Debug the stack`** (#54) — opens the frontend in a debugged browser and attaches to whichever services you pick, in one go, with the API breakpoints bound *before* the page loads and starts calling them. Closing the browser ends the whole thing; the services keep running, which is the point of attaching rather than launching.
