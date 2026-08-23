@@ -69,7 +69,7 @@ All data (service status, health, phase, profiles) comes exclusively from the da
 ## Requirements
 
 - VS Code ≥ 1.85
-- [@gachlab/devup](https://www.npmjs.com/package/@gachlab/devup) **≥ 0.10.1** running locally (uses `info`, `stats`, and `proxy` RPC methods). **≥ 0.12.0** for correct ports on lazy services, and **≥ 0.14.0** for host CPU in the status bar, for services to leave the sidebar when a hot reload drops them, and for `devup: Debug service`. Older daemons keep working, minus those.
+- [@gachlab/devup](https://www.npmjs.com/package/@gachlab/devup) **≥ 0.10.1** running locally (uses `info`, `stats`, and `proxy` RPC methods). **≥ 0.12.0** for correct ports on lazy services, and **≥ 0.14.0** for host CPU in the status bar, for services to leave the sidebar when a hot reload drops them, and for `devup: Debug service`. **≥ 0.15.0** so that debugging survives: below it the idle reaper stops a service you are paused in, and the inspector port goes stale on the first `node --watch` rebuild. Older daemons keep working, minus those.
 - Linux or macOS. Windows is not yet supported by the devup daemon.
 
 ## Install
