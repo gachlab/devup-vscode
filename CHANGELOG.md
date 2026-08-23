@@ -5,6 +5,11 @@ All notable changes to the devup VS Code extension are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Fixed
+- **Breakpoints stayed unbound when the workspace was opened through a symlink** (#65). Node resolves symlinks as it loads a module, so a service under `~/repos/x` — where `~/repos` links to `/mnt/data/repos` — reports its scripts as `file:///mnt/data/repos/x/…` while the editor is holding `/home/u/repos/x/…`. js-debug matches those by path, so nothing bound, and nothing said why: the session attached fine and every breakpoint just sat there hollow. The attach configuration now declares the rebase — and only when the two spellings actually differ, since `localRoot`/`remoteRoot` also *restrict* what gets mapped.
+
 ## [0.10.0] — 2026-08-22
 
 Lo de 0.9.0, pero encontrable.

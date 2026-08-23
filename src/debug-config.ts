@@ -19,13 +19,19 @@ export interface AttachConfig {
   sourceMaps: boolean;
   skipFiles: string[];
   restart: boolean;
+  /** Only when the workspace is reached through a symlink — see below. */
+  localRoot?: string;
+  remoteRoot?: string;
 }
 
 /** Session names start with this, which is how the extension recognises its
  *  own sessions among whatever else is running. */
 export const SESSION_PREFIX = 'devup: ';
 
-export function buildAttachConfig(svcName: string, port: number, cwd: string): AttachConfig {
+/** @param cwd  the service's directory as the *editor* spells it.
+ *  @param realCwd  the same directory with symlinks resolved. Safe to pass
+ *         always: it only changes the result when the two differ. */
+export function buildAttachConfig(svcName: string, port: number, cwd: string, realCwd = cwd): AttachConfig {
   return {
     type: 'node',
     request: 'attach',
@@ -36,17 +42,26 @@ export function buildAttachConfig(svcName: string, port: number, cwd: string): A
     address: '127.0.0.1',
     port,
     // Where the service's sources and source maps are, which is what resolves
-    // them. Note the absence of localRoot/remoteRoot: they declare a
-    // remote-to-local path *rebase*, and only paths under remoteRoot get
-    // mapped — pinning both to the service directory would leave a breakpoint
-    // in a sibling package of a monorepo unbound, which on a same-host attach
-    // is a restriction bought for nothing.
+    // them.
     cwd,
     sourceMaps: true,
     skipFiles: ['<node_internals>/**'],
     // Deliberately false: the inspector port changes on every restart, so a
     // reattach would target a dead endpoint. Debug again to pick up the new one.
     restart: false,
+    // A path rebase, only when there is genuinely something to rebase.
+    //
+    // Node resolves symlinks when it loads a module, so a service under
+    // `~/repos/x` — where `~/repos` is a link to `/mnt/data/repos` — reports
+    // its scripts as `file:///mnt/data/repos/x/...`. If the editor opened the
+    // linked spelling, js-debug is matching two different strings for the same
+    // file and every breakpoint stays unbound, silently.
+    //
+    // These two are what fixes that, and they are left out otherwise on
+    // purpose: they map only what sits under `remoteRoot` and drop the rest,
+    // which on a same-host attach with one spelling would be a restriction
+    // bought for nothing.
+    ...(realCwd !== cwd ? { localRoot: cwd, remoteRoot: realCwd } : {}),
   };
 }
 

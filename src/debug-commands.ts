@@ -1,3 +1,4 @@
+import { realpathSync } from 'node:fs';
 import * as vscode from 'vscode';
 import { sendRpc, RpcCallError } from './socket-client.js';
 import type { StatusStore } from './status-store.js';
@@ -233,7 +234,7 @@ export function registerDebugCommands(
         const svc = store.getAll().find(s => s.name === svcName);
         const cwd = resolveServiceCwd(svc?.cwd, workspaceRoot()) ?? workspaceRoot();
         wanted.add(svcName);
-        return buildAttachConfig(svcName, port, cwd) as unknown as vscode.DebugConfiguration;
+        return buildAttachConfig(svcName, port, cwd, realPath(cwd)) as unknown as vscode.DebugConfiguration;
       },
     }),
   );
@@ -321,7 +322,7 @@ export function registerDebugCommands(
         const cwd = resolveServiceCwd(svc?.cwd, workspaceRoot()) ?? workspaceRoot();
         wanted.add(label);
         try {
-          if (await vscode.debug.startDebugging(folder(), buildAttachConfig(label, port, cwd) as unknown as vscode.DebugConfiguration)) {
+          if (await vscode.debug.startDebugging(folder(), buildAttachConfig(label, port, cwd, realPath(cwd)) as unknown as vscode.DebugConfiguration)) {
             attachedNames.push(`${SESSION_PREFIX}${label}`);
           }
         } catch (e) {
@@ -452,13 +453,19 @@ async function attach(
   try {
     // A false return and a rejection both mean it did not attach; only the
     // first was being reported.
-    const started = await vscode.debug.startDebugging(folder, buildAttachConfig(svcName, port, cwd));
+  const started = await vscode.debug.startDebugging(folder, buildAttachConfig(svcName, port, cwd, realPath(cwd)));
     if (started) return;
     void vscode.window.showErrorMessage(`devup: could not attach to "${svcName}" on port ${port}.`);
   } catch (e) {
     const message = e instanceof Error ? e.message : String(e);
     void vscode.window.showErrorMessage(`devup: could not attach to "${svcName}" on port ${port} — ${message}`);
   }
+}
+
+/** The same directory with symlinks resolved, or unchanged when it cannot be
+ *  resolved — a service whose cwd does not exist yet is not a reason to fail. */
+function realPath(dir: string): string {
+  try { return realpathSync(dir); } catch { return dir; }
 }
 
 /** Resolves once the store has services, or when the wait runs out. */

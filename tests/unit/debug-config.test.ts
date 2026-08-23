@@ -23,12 +23,26 @@ describe('buildAttachConfig', () => {
     assert.equal(config.sourceMaps, true);
   });
 
-  it('declares no remote path rebase', () => {
+  it('declares no remote path rebase when there is nothing to rebase', () => {
     // localRoot/remoteRoot map paths under remoteRoot and drop everything
-    // else, so pinning them to the service directory would leave a breakpoint
-    // in a sibling package of a monorepo unbound. The attach is same-host.
+    // else, so pinning them to the service directory when both spellings are
+    // the same would be a restriction bought for nothing.
     assert.ok(!('localRoot' in config), 'localRoot should not be set');
     assert.ok(!('remoteRoot' in config), 'remoteRoot should not be set');
+    assert.ok(!('localRoot' in buildAttachConfig('a', 1, '/w/app/api', '/w/app/api')));
+  });
+
+  it('rebasa las rutas cuando el workspace se abrió por un symlink', () => {
+    // Node resuelve los symlinks al cargar un módulo, así que el proceso
+    // reporta `/mnt/data/repos/...` mientras el editor tiene abierto
+    // `/home/u/repos/...`. Son dos cadenas distintas para el mismo archivo y
+    // js-debug las casa por ruta: sin esto, todo breakpoint queda sin ligar y
+    // nada dice por qué.
+    const linked = buildAttachConfig('app-api', 39481, '/home/u/repos/app/api', '/mnt/data/repos/app/api');
+    assert.equal(linked.localRoot, '/home/u/repos/app/api');
+    assert.equal(linked.remoteRoot, '/mnt/data/repos/app/api');
+    // El cwd sigue siendo el que el editor entiende.
+    assert.equal(linked.cwd, '/home/u/repos/app/api');
   });
 
   it('does not ask the adapter to reattach', () => {
