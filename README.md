@@ -43,7 +43,14 @@ Talks to a running devup daemon via its Unix-socket control plane — no separat
 | Re-attaches on its own when a watch restart moves the inspector port | 0.9.0 |
 | Warns when the editor remaps a forwarded port, which breaks hardcoded API URLs | 0.9.0 |
 | Debug the stack — browser plus any services, in one session that closes together | 0.9.0 |
+| Walkthrough and reference docs for all of the above | 0.10.0 |
 | Resolves local `node_modules` devup before global install | 0.2.1 |
+
+## Debugging
+
+Attach a debugger to a service without taking it out of devup — watch, health checks and restarts keep working. Right-click a service, press F5, or run **devup: Debug the stack** to open your frontend and its APIs together.
+
+New to it? **devup: How do I debug my stack?** walks you through it inside the editor. The details that will otherwise surprise you — why there is no port in a `launch.json`, why the flag outlives your session, and what "follow a request" does and does not mean — are in **[docs/debugging.md](docs/debugging.md)**.
 
 ## How it works
 

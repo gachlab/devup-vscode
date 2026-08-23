@@ -5,6 +5,12 @@ All notable changes to the devup VS Code extension are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+- **A walkthrough for the debugging features** (#62), in the editor's Welcome page: start the stack, attach to a service, F5, the whole stack with a browser, and how to turn it off. Steps tick themselves off as you do them. Reachable any time as **devup: How do I debug my stack?**, and offered once — the first time the extension sees a live daemon, not before, since a tour whose first step is "start the stack" reads as noise when there is nothing to show.
+- **[docs/debugging.md](docs/debugging.md)** for what does not fit in a walkthrough step: which services can be debugged and why, the requirement on devup 0.15.0 and what breaks below it, why the inspector port is different on every restart, why the flag outlives your editor session, and a table of the failure messages and what each one means.
+
 ## [0.9.0] — 2026-08-22
 
 Depuración de verdad desde el editor: F5 por servicio, el stack entero — navegador incluido — en una sola sesión, y re-acople cuando el watch reinicia.
