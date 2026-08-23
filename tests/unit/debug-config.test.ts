@@ -1,7 +1,7 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import { join } from 'node:path';
-import { buildAttachConfig, buildBrowserConfig, buildServiceConfigurations, classifyTermination, parseBrowser, resolveServiceCwd, DEBUG_TYPE, SESSION_PREFIX } from '../../src/debug-config.js';
+import { buildAttachConfig, buildBrowserConfig, buildServiceConfigurations, classifyTermination, parseBrowser, pathRebase, resolveServiceCwd, DEBUG_TYPE, SESSION_PREFIX } from '../../src/debug-config.js';
 
 describe('buildAttachConfig', () => {
   const config = buildAttachConfig('app-api', 39481, '/w/app/api');
@@ -23,12 +23,22 @@ describe('buildAttachConfig', () => {
     assert.equal(config.sourceMaps, true);
   });
 
-  it('declares no remote path rebase', () => {
+  it('declares no remote path rebase when there is nothing to rebase', () => {
     // localRoot/remoteRoot map paths under remoteRoot and drop everything
-    // else, so pinning them to the service directory would leave a breakpoint
-    // in a sibling package of a monorepo unbound. The attach is same-host.
+    // else, so pinning them to the service directory when both spellings are
+    // the same would be a restriction bought for nothing.
     assert.ok(!('localRoot' in config), 'localRoot should not be set');
     assert.ok(!('remoteRoot' in config), 'remoteRoot should not be set');
+    assert.ok(!('localRoot' in buildAttachConfig('a', 1, '/w/app/api', null)));
+  });
+
+  it('lleva el rebase que le den, sin inventarlo', () => {
+    const linked = buildAttachConfig('app-api', 39481, '/home/u/repos/app/api',
+      { localRoot: '/home/u/repos', remoteRoot: '/mnt/data/repos' });
+    assert.equal(linked.localRoot, '/home/u/repos');
+    assert.equal(linked.remoteRoot, '/mnt/data/repos');
+    // El cwd sigue siendo el que el editor entiende.
+    assert.equal(linked.cwd, '/home/u/repos/app/api');
   });
 
   it('does not ask the adapter to reattach', () => {
@@ -188,5 +198,27 @@ describe('parseBrowser', () => {
     assert.equal(parseBrowser('firefox'), 'chrome');
     assert.equal(parseBrowser(undefined), 'chrome');
     assert.equal(parseBrowser(42), 'chrome');
+  });
+});
+
+describe('pathRebase', () => {
+  it('no rebasa nada cuando las dos formas coinciden', () => {
+    // localRoot/remoteRoot no sólo traducen: js-debug descarta todo lo que no
+    // cuelgue de remoteRoot. Declararlos sin necesidad es perder el resto del
+    // monorepo a cambio de nada.
+    assert.equal(pathRebase('/w', '/w'), null);
+  });
+
+  it('rebasa del lado del editor al lado del proceso', () => {
+    assert.deepEqual(pathRebase('/home/u/repos', '/mnt/data/repos'),
+      { localRoot: '/home/u/repos', remoteRoot: '/mnt/data/repos' });
+  });
+
+  it('en macOS no confunde un cambio de mayúsculas con dos ubicaciones', () => {
+    // `realpathSync` devuelve el casing real del disco, así que abrir
+    // /Users/u/Repos cuando el disco dice `repos` parecerían dos sitios.
+    assert.equal(pathRebase('/Users/u/Repos', '/Users/u/repos', true), null);
+    // Y con la comparación sensible sí son dos, que es lo correcto en Linux.
+    assert.notEqual(pathRebase('/Users/u/Repos', '/Users/u/repos', false), null);
   });
 });

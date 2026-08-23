@@ -1,10 +1,11 @@
+import { realpathSync } from 'node:fs';
 import * as vscode from 'vscode';
 import { sendRpc, RpcCallError } from './socket-client.js';
 import type { StatusStore } from './status-store.js';
 import { extractSvcName } from './svc-name.js';
 import {
   buildAttachConfig, buildBrowserConfig, buildServiceConfigurations, classifyTermination,
-  parseBrowser, resolveServiceCwd, DEBUG_TYPE, SESSION_PREFIX,
+  parseBrowser, pathRebase, resolveServiceCwd, DEBUG_TYPE, SESSION_PREFIX, type PathRebase,
 } from './debug-config.js';
 import { buildServiceUrl } from './url-builder.js';
 import { canonicalPort } from './forward-logic.js';
@@ -233,7 +234,7 @@ export function registerDebugCommands(
         const svc = store.getAll().find(s => s.name === svcName);
         const cwd = resolveServiceCwd(svc?.cwd, workspaceRoot()) ?? workspaceRoot();
         wanted.add(svcName);
-        return buildAttachConfig(svcName, port, cwd) as unknown as vscode.DebugConfiguration;
+        return buildAttachConfig(svcName, port, cwd, workspaceRebase(workspaceRoot())) as unknown as vscode.DebugConfiguration;
       },
     }),
   );
@@ -321,7 +322,7 @@ export function registerDebugCommands(
         const cwd = resolveServiceCwd(svc?.cwd, workspaceRoot()) ?? workspaceRoot();
         wanted.add(label);
         try {
-          if (await vscode.debug.startDebugging(folder(), buildAttachConfig(label, port, cwd) as unknown as vscode.DebugConfiguration)) {
+          if (await vscode.debug.startDebugging(folder(), buildAttachConfig(label, port, cwd, workspaceRebase(workspaceRoot())) as unknown as vscode.DebugConfiguration)) {
             attachedNames.push(`${SESSION_PREFIX}${label}`);
           }
         } catch (e) {
@@ -452,13 +453,29 @@ async function attach(
   try {
     // A false return and a rejection both mean it did not attach; only the
     // first was being reported.
-    const started = await vscode.debug.startDebugging(folder, buildAttachConfig(svcName, port, cwd));
+    const started = await vscode.debug.startDebugging(
+      folder, buildAttachConfig(svcName, port, cwd, workspaceRebase(workspaceRoot)),
+    );
     if (started) return;
     void vscode.window.showErrorMessage(`devup: could not attach to "${svcName}" on port ${port}.`);
   } catch (e) {
     const message = e instanceof Error ? e.message : String(e);
     void vscode.window.showErrorMessage(`devup: could not attach to "${svcName}" on port ${port} — ${message}`);
   }
+}
+
+/** The rebase to hand the attach configuration, anchored at the **workspace
+ *  folder** — not at a service directory, which would stop breakpoints binding
+ *  anywhere else in a monorepo. Null when nothing needs rebasing.
+ *
+ *  Resolved fresh each time rather than once at activation: the folder can
+ *  change under a multi-root workspace, and reading a link is cheap. */
+function workspaceRebase(workspaceRoot: string): PathRebase | null {
+  let real: string;
+  // A workspace folder that cannot be resolved is not a reason to fail; it
+  // just means there is nothing to rebase.
+  try { real = realpathSync(workspaceRoot); } catch { return null; }
+  return pathRebase(workspaceRoot, real, process.platform === 'darwin');
 }
 
 /** Resolves once the store has services, or when the wait runs out. */

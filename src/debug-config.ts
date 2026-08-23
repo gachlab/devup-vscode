@@ -19,13 +19,45 @@ export interface AttachConfig {
   sourceMaps: boolean;
   skipFiles: string[];
   restart: boolean;
+  /** Only when the workspace is reached through a symlink — see below. */
+  localRoot?: string;
+  remoteRoot?: string;
 }
 
 /** Session names start with this, which is how the extension recognises its
  *  own sessions among whatever else is running. */
 export const SESSION_PREFIX = 'devup: ';
 
-export function buildAttachConfig(svcName: string, port: number, cwd: string): AttachConfig {
+export interface PathRebase {
+  localRoot: string;
+  remoteRoot: string;
+}
+
+/** The rebase to declare when the editor and the runtime spell the same tree
+ *  differently, or null when they agree.
+ *
+ *  **Anchor this at the workspace folder, never at one service's directory.**
+ *  js-debug's `rebaseRemoteToLocal` returns the empty string — no local file at
+ *  all — for anything that does not sit under `remoteRoot`, so a rebase pinned
+ *  to `services/api` would silently stop binding breakpoints in
+ *  `packages/shared`, which is the normal shape of a monorepo. The pair is a
+ *  restriction as much as a translation.
+ *
+ *  `caseInsensitive` is for macOS: `realpathSync` returns the true casing of a
+ *  path, so opening `/Users/u/Repos` when the disk says `repos` would look
+ *  like two locations and switch the restriction on for a workspace that never
+ *  needed it. */
+export function pathRebase(localRoot: string, realRoot: string, caseInsensitive = false): PathRebase | null {
+  if (localRoot === realRoot) return null;
+  if (caseInsensitive && localRoot.toLowerCase() === realRoot.toLowerCase()) return null;
+  return { localRoot, remoteRoot: realRoot };
+}
+
+/** @param cwd  the service's directory as the *editor* spells it.
+ *  @param rebase  from `pathRebase`, anchored at the workspace folder. Null
+ *         when the editor and the runtime agree on how to spell paths, which
+ *         is the common case. */
+export function buildAttachConfig(svcName: string, port: number, cwd: string, rebase: PathRebase | null = null): AttachConfig {
   return {
     type: 'node',
     request: 'attach',
@@ -36,17 +68,22 @@ export function buildAttachConfig(svcName: string, port: number, cwd: string): A
     address: '127.0.0.1',
     port,
     // Where the service's sources and source maps are, which is what resolves
-    // them. Note the absence of localRoot/remoteRoot: they declare a
-    // remote-to-local path *rebase*, and only paths under remoteRoot get
-    // mapped — pinning both to the service directory would leave a breakpoint
-    // in a sibling package of a monorepo unbound, which on a same-host attach
-    // is a restriction bought for nothing.
+    // them.
     cwd,
     sourceMaps: true,
     skipFiles: ['<node_internals>/**'],
     // Deliberately false: the inspector port changes on every restart, so a
     // reattach would target a dead endpoint. Debug again to pick up the new one.
     restart: false,
+    // A path rebase, only when there is genuinely something to rebase.
+    //
+    // Node resolves symlinks when it loads a module, so a service under
+    // `~/repos/x` — where `~/repos` is a link to `/mnt/data/repos` — reports
+    // its scripts as `file:///mnt/data/repos/x/...`. If the editor opened the
+    // linked spelling, js-debug is matching two different strings for the same
+    // file and every breakpoint stays unbound, silently. See `pathRebase` for
+    // why this is left out whenever it is not needed.
+    ...(rebase ?? {}),
   };
 }
 
