@@ -40,7 +40,8 @@
   "activationEvents": [
     "workspaceContains:devup.config.ts",
     "workspaceContains:devup.config.js",
-    "workspaceContains:devup.config.json"
+    "workspaceContains:devup.config.json",
+    "onDebugDynamicConfigurations:devup"
   ],
   "contributes": {
     "configuration": {
@@ -129,6 +130,33 @@
         }
       }
     },
+    "debuggers": [
+      {
+        "type": "devup",
+        "label": "devup",
+        "languages": [
+          "javascript",
+          "typescript"
+        ],
+        "configurationAttributes": {
+          "attach": {
+            "properties": {
+              "service": {
+                "type": "string",
+                "description": "The devup service to attach to. Omit to be asked. The service is restarted under the Node inspector if it is not already."
+              }
+            }
+          }
+        },
+        "initialConfigurations": [
+          {
+            "type": "devup",
+            "request": "attach",
+            "name": "devup: attach to a service"
+          }
+        ]
+      }
+    ],
     "viewsWelcome": [
       {
         "view": "devupServices",

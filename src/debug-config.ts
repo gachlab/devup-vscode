@@ -58,3 +58,32 @@ export function resolveServiceCwd(svcCwd: string | undefined, workspaceRoot: str
   const cwd = svcCwd.trim();
   return isAbsolute(cwd) ? cwd : join(workspaceRoot, cwd);
 }
+
+/** The debug type this extension contributes.
+ *
+ *  A configuration of this type carries only a service name; everything else —
+ *  asking the daemon to restart it under the inspector, waiting for Node to
+ *  announce a port, resolving the service's directory — happens in
+ *  `resolveDebugConfiguration`, which is allowed to be async and to hand back a
+ *  configuration of a *different* type. VS Code re-runs the resolver chain for
+ *  whatever type comes out, which is how this becomes a plain `node` attach.
+ *  js-debug does the same thing internally (`chrome` → `pwa-chrome`). */
+export const DEBUG_TYPE = 'devup';
+
+export interface DevupDebugConfig {
+  type: typeof DEBUG_TYPE;
+  request: 'attach';
+  name: string;
+  /** The devup service to attach to. Absent means "ask". */
+  service?: string;
+}
+
+/** One entry per service for the Run and Debug dropdown. */
+export function buildServiceConfigurations(serviceNames: readonly string[]): DevupDebugConfig[] {
+  return serviceNames.map(service => ({
+    type: DEBUG_TYPE,
+    request: 'attach' as const,
+    name: `${SESSION_PREFIX}${service}`,
+    service,
+  }));
+}

@@ -5,6 +5,12 @@ All notable changes to the devup VS Code extension are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+- **F5 debugging** (#53). `devup: Debug service` was a command and nothing else: it did not appear in the Run and Debug dropdown, F5 did not reach it, and it could not be composed. There is now one entry per service in the dropdown, with no launch.json to write — the configuration carries only a service name, and resolving it does the rest: ask the daemon to restart the service under the inspector, wait for Node to announce its port, and hand back a plain `node` attach. The context-menu command now takes that same path, so the two cannot drift.
+- **Re-attaches on its own after a restart** (#56). devup starts a debugged service with `--inspect=0`, so the OS picks the port and it changes on every restart — a watch rebuild ended the session and left you to start it again by hand, every time you saved. The extension now tells a restart from a detach the only way available: the daemon clears `debugPort` when the process closes and leaves it alone when a debugger merely disconnects. On a restart it waits for the new port and re-attaches; on a detach it stays out of the way.
+
 ## [0.8.0] — 2026-08-22
 
 Ten issues from an audit of the extension against `@gachlab/devup` 0.14.0, which is what makes three of these possible. Older daemons keep working without them.
