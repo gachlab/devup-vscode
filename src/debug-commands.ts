@@ -2,6 +2,7 @@ import { realpathSync } from 'node:fs';
 import * as vscode from 'vscode';
 import { sendRpc, RpcCallError } from './socket-client.js';
 import type { StatusStore } from './status-store.js';
+import { tooOldMessage } from './daemon-version.js';
 import { extractSvcName } from './svc-name.js';
 import {
   buildAttachConfig, buildBrowserConfig, buildServiceConfigurations, classifyTermination,
@@ -82,6 +83,7 @@ async function ensureInspector(
     // and its refusal ("does not run node") is the better message.
     await sendRpc(socketPath(), 'debug', { svc: svcName, enable: true },
       { timeoutMs: DEBUG_RPC_TIMEOUT_MS }),
+    store,
   );
   if (!attempt.ok) return null;
   const result = attempt.value;
@@ -369,6 +371,7 @@ export function registerDebugCommands(
       const attempt = await withProgress(`devup: restarting "${svcName}" without the inspector…`, async () =>
         await sendRpc(socketPath(), 'debug', { svc: svcName, enable: false },
           { timeoutMs: DEBUG_RPC_TIMEOUT_MS }),
+        store,
       );
       if (!attempt.ok) return;
       const result = attempt.value;
@@ -387,7 +390,13 @@ export function registerDebugCommands(
 /** Runs the debug RPC behind a progress notification. Reports failure to the
  *  user and says so in the return, rather than handing back a value the caller
  *  has to tell apart from a legitimate one. */
-async function withProgress(title: string, run: () => Promise<unknown>): Promise<Attempt<DebugResult>> {
+async function withProgress(
+  title: string,
+  run: () => Promise<unknown>,
+  /** The daemon's own account of itself, for the "too old" message. Optional
+   *  so a caller without a store still gets the generic wording. */
+  store?: StatusStore,
+): Promise<Attempt<DebugResult>> {
   try {
     const value = await vscode.window.withProgress(
       { location: vscode.ProgressLocation.Notification, title }, run,
@@ -403,12 +412,14 @@ async function withProgress(title: string, run: () => Promise<unknown>): Promise
     // user could act on.
     void vscode.window.showErrorMessage(
       message.includes('unknown method')
-        ? 'devup: this daemon cannot start a service under the inspector. Needs @gachlab/devup 0.14.0 or newer.'
+        ? `devup: ${tooOldMessage('this daemon cannot start a service under the inspector.', '0.14.0', store?.getInfo().version)}`
         : `devup: ${message}`,
     );
     return { ok: false };
   }
 }
+
+
 
 /** Waits for the inspector port to appear in the status stream.
  *
