@@ -1,6 +1,6 @@
 import * as vscode from 'vscode';
 import type { StatusStore } from './status-store.js';
-import { isPortIgnored, parseForwardMode, reactToState, selectForwardPorts, type ForwardMode } from './forward-logic.js';
+import { canonicalPort, describeRemap, isPortIgnored, parseForwardMode, reactToState, selectForwardPorts, type ForwardMode } from './forward-logic.js';
 
 /** Asks the editor to tunnel devup service ports back to the local machine.
  *
@@ -38,6 +38,10 @@ export class PortForwarder implements vscode.Disposable {
   /** Fires when the set of forwarded ports changes. */
   readonly onDidChangeForwarded = this.changeEmitter.event;
   private lastState: string | null = null;
+  /** Ports already reported as remapped. The warning is worth saying once, not
+   *  every 30 s. Cleared when the daemon comes back, since the port set — and
+   *  what the editor could bind — may be different by then. */
+  private readonly remapWarned = new Set<number>();
   /** Set by `devup: Close forwarded ports…`. The editor's picker is the only
    *  way to close a tunnel, and it does not tell us which ones went — so
    *  re-asserting on the 30 s timer would silently re-open everything the user
@@ -135,6 +139,28 @@ export class PortForwarder implements vscode.Disposable {
     });
   }
 
+  /** An app that hardcodes `http://localhost:<port>` — which is how a frontend
+   *  usually calls its API — reaches nothing when the editor had to bind a
+   *  different port, and nothing on screen says so. The Ports view knows; it
+   *  is just not where anyone is looking. */
+  private reportRemap(port: number, resolved: vscode.Uri): void {
+    if (this.remapWarned.has(port)) return;
+    const what = describeRemap(port, resolved);
+    if (!what) return;
+    this.remapWarned.add(port);
+    const services = this.store.getAll()
+      .filter(s => canonicalPort(s) === port)
+      .map(s => `"${s.name}"`)
+      .join(', ');
+    void vscode.window.showWarningMessage(
+      `devup: ${services || `port ${port}`} ${what}. `
+      + 'Anything calling the original port directly — a frontend hardcoding its API URL — will not reach it.',
+      'Show Ports',
+    ).then(choice => {
+      if (choice) void vscode.commands.executeCommand('workbench.view.remote.tunnelPanel.focus');
+    });
+  }
+
   private mode(): ForwardMode {
     return parseForwardMode(vscode.workspace.getConfiguration('devup').get('portForwarding'));
   }
@@ -165,7 +191,10 @@ export class PortForwarder implements vscode.Disposable {
         // Result deliberately dropped rather than cached: the editor may hand
         // back a different local port, and a cached uri goes stale the moment
         // the user closes the tunnel. The Ports view is the source of truth.
-        await vscode.env.asExternalUri(vscode.Uri.parse(`http://localhost:${port}`));
+        const resolved = await vscode.env.asExternalUri(vscode.Uri.parse(`http://localhost:${port}`));
+        // Read, not cached: what goes stale is the uri, and it is still
+        // dropped. What is kept is the answer to "did the port survive?".
+        this.reportRemap(port, resolved);
         if (!this.requested.has(port)) { this.requested.add(port); changed = true; }
       } catch {
         // Transient — port not bound yet, or the resolver is busy mid-reconnect.

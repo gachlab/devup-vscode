@@ -1,6 +1,6 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { selectForwardPorts, parseForwardMode, isPortIgnored, canonicalPort, reactToState } from '../../src/forward-logic.js';
+import { selectForwardPorts, parseForwardMode, isPortIgnored, canonicalPort, reactToState, describeRemap } from '../../src/forward-logic.js';
 import type { ServiceSnapshot } from '../../src/types.js';
 
 function svc(name: string, port: number, type: string, originalPort?: number): ServiceSnapshot {
@@ -199,5 +199,38 @@ describe('reactToState', () => {
 
   it('has nothing to resume when forwarding was not paused', () => {
     assert.equal(reactToState({ ...base, paused: false, previous: 'unreachable', next: 'connected' }), 'none');
+  });
+});
+
+describe('describeRemap', () => {
+  const uri = (authority: string, scheme = 'http') => ({ authority, scheme });
+
+  it('calla cuando el puerto sobrevivió', () => {
+    assert.equal(describeRemap(3000, uri('localhost:3000')), null);
+    assert.equal(describeRemap(3000, uri('127.0.0.1:3000')), null);
+  });
+
+  it('avisa cuando el editor tuvo que atar otro puerto', () => {
+    // El caso que rompe en silencio: un front que pide localhost:3000 fijo.
+    const what = describeRemap(3000, uri('localhost:3001'));
+    assert.match(what!, /localhost:3001/);
+    assert.match(what!, /not localhost:3000/);
+  });
+
+  it('avisa cuando no hay puerto local en absoluto', () => {
+    // Codespaces y Remote Tunnels publican en una dirección alojada.
+    const what = describeRemap(3000, uri('brave-space-1234-3000.app.github.dev', 'https'));
+    assert.match(what!, /https:\/\/brave-space-1234-3000\.app\.github\.dev/);
+    assert.match(what!, /not on a local port/);
+  });
+
+  it('no confunde una autoridad IPv6 con un cambio de host', () => {
+    assert.equal(describeRemap(3000, uri('[::1]:3000')), null);
+    assert.match(describeRemap(3000, uri('[::1]:3001'))!, /localhost:3001/);
+  });
+
+  it('calla si el uri resuelto no trae puerto pero sí es local', () => {
+    // No hay nada que reportar: el editor no dijo que lo moviera.
+    assert.equal(describeRemap(3000, uri('localhost')), null);
   });
 });
