@@ -2,7 +2,12 @@ import * as vscode from 'vscode';
 import { sendRpc, RpcCallError } from './socket-client.js';
 import type { StatusStore } from './status-store.js';
 import { extractSvcName } from './svc-name.js';
-import { buildAttachConfig, buildServiceConfigurations, classifyTermination, resolveServiceCwd, DEBUG_TYPE, SESSION_PREFIX } from './debug-config.js';
+import {
+  buildAttachConfig, buildBrowserConfig, buildServiceConfigurations, classifyTermination,
+  parseBrowser, resolveServiceCwd, DEBUG_TYPE, SESSION_PREFIX,
+} from './debug-config.js';
+import { buildServiceUrl } from './url-builder.js';
+import { canonicalPort } from './forward-logic.js';
 
 /** Debugging a service used to mean stopping it in devup, running it by hand
  *  outside, and giving up watch, health checks and restarts while you did
@@ -258,6 +263,55 @@ export function registerDebugCommands(
       }
     }),
 
+    vscode.commands.registerCommand('devup.debugStack', async () => {
+      // Following a request from the frontend into the API means having both
+      // ends paused in the same window. VS Code has no API for compounds —
+      // `startDebugging` only takes the *name* of one already written in
+      // launch.json — so this composes the equivalent by hand.
+      const all = store.getAll();
+      const webs = all.filter(s => s.type === 'web');
+      if (!webs.length) {
+        void vscode.window.showInformationMessage('devup: no web service to open.');
+        return;
+      }
+      const web = webs.length === 1 ? webs[0]! : await pickOne(webs.map(s => s.name), 'Which frontend?')
+        .then(name => all.find(s => s.name === name));
+      if (!web) return;
+
+      const apis = all.filter(s => s.type !== 'web');
+      const picked = await vscode.window.showQuickPick(
+        apis.map(s => ({ label: s.name, description: `:${canonicalPort(s)}`, picked: false })),
+        { canPickMany: true, placeHolder: 'Attach the debugger to which services? (the browser is attached either way)' },
+      );
+      if (!picked) return;
+
+      // The APIs first, so their breakpoints are bound before the page loads
+      // and starts calling them.
+      const attachedNames: string[] = [];
+      for (const { label } of picked) {
+        if (attached.has(label)) { attachedNames.push(`${SESSION_PREFIX}${label}`); continue; }
+        const port = await ensureInspector(store, socketPath, label);
+        if (port === null) continue; // ensureInspector already said why
+        const svc = store.getAll().find(s => s.name === label);
+        const cwd = resolveServiceCwd(svc?.cwd, workspaceRoot()) ?? workspaceRoot();
+        wanted.add(label);
+        if (await vscode.debug.startDebugging(folder(), buildAttachConfig(label, port, cwd) as unknown as vscode.DebugConfiguration)) {
+          attachedNames.push(`${SESSION_PREFIX}${label}`);
+        }
+      }
+
+      const url = buildServiceUrl(web.name, canonicalPort(web), store.getProxy());
+      const webRoot = resolveServiceCwd(web.cwd, workspaceRoot()) ?? workspaceRoot();
+      const browser = parseBrowser(vscode.workspace.getConfiguration('devup').get('debug.browser'));
+      const started = await vscode.debug.startDebugging(
+        folder(),
+        buildBrowserConfig(web.name, url, webRoot, attachedNames, browser) as unknown as vscode.DebugConfiguration,
+      );
+      if (!started) {
+        void vscode.window.showErrorMessage(`devup: could not open ${url} under the debugger.`);
+      }
+    }),
+
     vscode.commands.registerCommand('devup.stopDebugging', async (arg?: string | Record<string, unknown>) => {
       // Every service, not only those reporting a port — and the tree entry,
       // which can only key on the live port, is deliberately not the whole
@@ -377,6 +431,10 @@ function waitForServices(store: StatusStore, timeoutMs: number): Promise<void> {
     const timer = setTimeout(finish, timeoutMs);
     const sub = store.onDidChange(() => { if (store.getAll().length) finish(); });
   });
+}
+
+async function pickOne(labels: string[], placeHolder: string): Promise<string | undefined> {
+  return (await vscode.window.showQuickPick(labels, { placeHolder })) ?? undefined;
 }
 
 async function pickService(
