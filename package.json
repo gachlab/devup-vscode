@@ -2,7 +2,7 @@
   "name": "devup-vscode",
   "displayName": "devup",
   "description": "Sidebar tree, status bar, and live logs for @gachlab/devup — control your dev stack without leaving the editor.",
-  "version": "0.9.0",
+  "version": "0.10.0",
   "publisher": "gachlab",
   "icon": "media/icon.png",
   "galleryBanner": {
@@ -150,35 +150,53 @@
             "id": "devup.walkthrough.daemon",
             "title": "Start the stack",
             "description": "The extension talks to a running daemon over its control-plane socket. A service you cannot see is a service you cannot attach to.\n[Start daemon](command:devup.daemon.start)",
-            "media": { "markdown": "media/walkthrough/01-daemon.md" },
-            "completionEvents": ["onContext:devup.daemonReachable"]
+            "media": {
+              "markdown": "media/walkthrough/01-daemon.md"
+            },
+            "completionEvents": [
+              "onContext:devup.daemonReachable"
+            ]
           },
           {
             "id": "devup.walkthrough.attach",
             "title": "Attach to one service",
             "description": "Right-click a service in the devup sidebar, or run the command. It restarts under the Node inspector and the editor attaches.\n[Debug a service](command:devup.debugService)",
-            "media": { "markdown": "media/walkthrough/02-attach.md" },
-            "completionEvents": ["onCommand:devup.debugService"]
+            "media": {
+              "markdown": "media/walkthrough/02-attach.md"
+            },
+            "completionEvents": [
+              "onCommand:devup.debugService"
+            ]
           },
           {
             "id": "devup.walkthrough.f5",
             "title": "Or just press F5",
             "description": "One entry per service in the Run and Debug picker, with no launch.json — and no port written down, because it changes on every restart.\n[Open Run and Debug](command:workbench.view.debug)",
-            "media": { "markdown": "media/walkthrough/03-f5.md" }
+            "media": {
+              "markdown": "media/walkthrough/03-f5.md"
+            }
           },
           {
             "id": "devup.walkthrough.stack",
             "title": "Follow a request front to back",
             "description": "Opens the frontend in a debugged browser and attaches to the services you pick, with their breakpoints bound before the page loads.\n[Debug the stack](command:devup.debugStack)",
-            "media": { "markdown": "media/walkthrough/04-stack.md" },
-            "completionEvents": ["onCommand:devup.debugStack"]
+            "media": {
+              "markdown": "media/walkthrough/04-stack.md"
+            },
+            "completionEvents": [
+              "onCommand:devup.debugStack"
+            ]
           },
           {
             "id": "devup.walkthrough.stop",
             "title": "Turn it off when you are done",
             "description": "The --inspect flag lives on the service in the daemon, not in your editor session — so it outlives both the crash you were chasing and the window you were in.\n[Stop debugging](command:devup.stopDebugging)",
-            "media": { "markdown": "media/walkthrough/05-stop.md" },
-            "completionEvents": ["onCommand:devup.stopDebugging"]
+            "media": {
+              "markdown": "media/walkthrough/05-stop.md"
+            },
+            "completionEvents": [
+              "onCommand:devup.stopDebugging"
+            ]
           }
         ]
       }
