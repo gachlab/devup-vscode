@@ -1,7 +1,7 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import { join } from 'node:path';
-import { buildAttachConfig, buildBrowserConfig, buildServiceConfigurations, classifyTermination, parseBrowser, resolveServiceCwd, DEBUG_TYPE, SESSION_PREFIX } from '../../src/debug-config.js';
+import { buildAttachConfig, buildBrowserConfig, buildServiceConfigurations, classifyTermination, parseBrowser, pathRebase, resolveServiceCwd, DEBUG_TYPE, SESSION_PREFIX } from '../../src/debug-config.js';
 
 describe('buildAttachConfig', () => {
   const config = buildAttachConfig('app-api', 39481, '/w/app/api');
@@ -29,18 +29,14 @@ describe('buildAttachConfig', () => {
     // the same would be a restriction bought for nothing.
     assert.ok(!('localRoot' in config), 'localRoot should not be set');
     assert.ok(!('remoteRoot' in config), 'remoteRoot should not be set');
-    assert.ok(!('localRoot' in buildAttachConfig('a', 1, '/w/app/api', '/w/app/api')));
+    assert.ok(!('localRoot' in buildAttachConfig('a', 1, '/w/app/api', null)));
   });
 
-  it('rebasa las rutas cuando el workspace se abrió por un symlink', () => {
-    // Node resuelve los symlinks al cargar un módulo, así que el proceso
-    // reporta `/mnt/data/repos/...` mientras el editor tiene abierto
-    // `/home/u/repos/...`. Son dos cadenas distintas para el mismo archivo y
-    // js-debug las casa por ruta: sin esto, todo breakpoint queda sin ligar y
-    // nada dice por qué.
-    const linked = buildAttachConfig('app-api', 39481, '/home/u/repos/app/api', '/mnt/data/repos/app/api');
-    assert.equal(linked.localRoot, '/home/u/repos/app/api');
-    assert.equal(linked.remoteRoot, '/mnt/data/repos/app/api');
+  it('lleva el rebase que le den, sin inventarlo', () => {
+    const linked = buildAttachConfig('app-api', 39481, '/home/u/repos/app/api',
+      { localRoot: '/home/u/repos', remoteRoot: '/mnt/data/repos' });
+    assert.equal(linked.localRoot, '/home/u/repos');
+    assert.equal(linked.remoteRoot, '/mnt/data/repos');
     // El cwd sigue siendo el que el editor entiende.
     assert.equal(linked.cwd, '/home/u/repos/app/api');
   });
@@ -202,5 +198,27 @@ describe('parseBrowser', () => {
     assert.equal(parseBrowser('firefox'), 'chrome');
     assert.equal(parseBrowser(undefined), 'chrome');
     assert.equal(parseBrowser(42), 'chrome');
+  });
+});
+
+describe('pathRebase', () => {
+  it('no rebasa nada cuando las dos formas coinciden', () => {
+    // localRoot/remoteRoot no sólo traducen: js-debug descarta todo lo que no
+    // cuelgue de remoteRoot. Declararlos sin necesidad es perder el resto del
+    // monorepo a cambio de nada.
+    assert.equal(pathRebase('/w', '/w'), null);
+  });
+
+  it('rebasa del lado del editor al lado del proceso', () => {
+    assert.deepEqual(pathRebase('/home/u/repos', '/mnt/data/repos'),
+      { localRoot: '/home/u/repos', remoteRoot: '/mnt/data/repos' });
+  });
+
+  it('en macOS no confunde un cambio de mayúsculas con dos ubicaciones', () => {
+    // `realpathSync` devuelve el casing real del disco, así que abrir
+    // /Users/u/Repos cuando el disco dice `repos` parecerían dos sitios.
+    assert.equal(pathRebase('/Users/u/Repos', '/Users/u/repos', true), null);
+    // Y con la comparación sensible sí son dos, que es lo correcto en Linux.
+    assert.notEqual(pathRebase('/Users/u/Repos', '/Users/u/repos', false), null);
   });
 });
