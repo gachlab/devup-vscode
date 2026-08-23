@@ -213,20 +213,24 @@ describe('describeRemap', () => {
   it('avisa cuando el editor tuvo que atar otro puerto', () => {
     // El caso que rompe en silencio: un front que pide localhost:3000 fijo.
     const what = describeRemap(3000, uri('localhost:3001'));
-    assert.match(what!, /localhost:3001/);
-    assert.match(what!, /not localhost:3000/);
+    assert.equal(what!.kind, 'port');
+    assert.match(what!.text, /localhost:3001/);
+    assert.match(what!.text, /not localhost:3000/);
   });
 
-  it('avisa cuando no hay puerto local en absoluto', () => {
-    // Codespaces y Remote Tunnels publican en una dirección alojada.
+  it('distingue el caso alojado, que no es por puerto sino por ventana', () => {
+    // En Codespaces resuelven así *todos* los puertos, así que avisar por
+    // servicio apilaría un aviso por cada web sobre algo que nadie puede
+    // cambiar. El tipo es lo que permite deduplicarlo distinto.
     const what = describeRemap(3000, uri('brave-space-1234-3000.app.github.dev', 'https'));
-    assert.match(what!, /https:\/\/brave-space-1234-3000\.app\.github\.dev/);
-    assert.match(what!, /not on a local port/);
+    assert.equal(what!.kind, 'hosted');
+    assert.match(what!.text, /https:\/\/brave-space-1234-3000\.app\.github\.dev/);
+    assert.match(what!.text, /not on a local port/);
   });
 
   it('no confunde una autoridad IPv6 con un cambio de host', () => {
     assert.equal(describeRemap(3000, uri('[::1]:3000')), null);
-    assert.match(describeRemap(3000, uri('[::1]:3001'))!, /localhost:3001/);
+    assert.equal(describeRemap(3000, uri('[::1]:3001'))!.kind, 'port');
   });
 
   it('calla si el uri resuelto no trae puerto pero sí es local', () => {

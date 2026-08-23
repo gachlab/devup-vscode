@@ -42,6 +42,10 @@ export class PortForwarder implements vscode.Disposable {
    *  every 30 s. Cleared when the daemon comes back, since the port set — and
    *  what the editor could bind — may be different by then. */
   private readonly remapWarned = new Set<number>();
+  /** The hosted case is not per port: in Codespaces *every* port resolves that
+   *  way, so warning per service would stack one toast per web app describing
+   *  a situation nobody can change. */
+  private hostedWarned = false;
   /** Set by `devup: Close forwarded ports…`. The editor's picker is the only
    *  way to close a tunnel, and it does not tell us which ones went — so
    *  re-asserting on the 30 s timer would silently re-open everything the user
@@ -115,6 +119,13 @@ export class PortForwarder implements vscode.Disposable {
     const state = this.store.getState();
     const previous = this.lastState;
     this.lastState = state;
+    if (previous !== 'connected' && state === 'connected') {
+      // A fresh daemon can land on different ports, and the editor can bind
+      // them differently — so a warning already shown may no longer be true,
+      // and the one that now applies has not been shown.
+      this.remapWarned.clear();
+      this.hostedWarned = false;
+    }
     const reaction = reactToState({
       previous,
       next: state,
@@ -144,20 +155,36 @@ export class PortForwarder implements vscode.Disposable {
    *  different port, and nothing on screen says so. The Ports view knows; it
    *  is just not where anyone is looking. */
   private reportRemap(port: number, resolved: vscode.Uri): void {
-    if (this.remapWarned.has(port)) return;
     const what = describeRemap(port, resolved);
     if (!what) return;
-    this.remapWarned.add(port);
+    if (what.kind === 'hosted') {
+      if (this.hostedWarned) return;
+      this.hostedWarned = true;
+    } else {
+      if (this.remapWarned.has(port)) return;
+      this.remapWarned.add(port);
+    }
     const services = this.store.getAll()
       .filter(s => canonicalPort(s) === port)
       .map(s => `"${s.name}"`)
       .join(', ');
+    const subject = what.kind === 'hosted'
+      ? 'this window forwards ports to hosted addresses, so every service'
+      : `${services || `port ${port}`}`;
     void vscode.window.showWarningMessage(
-      `devup: ${services || `port ${port}`} ${what}. `
+      `devup: ${subject} ${what.text}. `
       + 'Anything calling the original port directly — a frontend hardcoding its API URL — will not reach it.',
       'Show Ports',
-    ).then(choice => {
-      if (choice) void vscode.commands.executeCommand('workbench.view.remote.tunnelPanel.focus');
+    ).then(async choice => {
+      if (!choice) return;
+      // The Ports view lives in the Remote Explorer container. Guarded like
+      // the other editor commands this extension borrows: which of them exist
+      // depends on the editor build.
+      try {
+        await vscode.commands.executeCommand('workbench.view.remote');
+      } catch {
+        void vscode.window.showInformationMessage('devup: open the Ports view from the panel to see the addresses.');
+      }
     });
   }
 

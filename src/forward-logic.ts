@@ -117,18 +117,26 @@ export function reactToState(input: ForwardReactionInput): ForwardReaction {
  *  It matters because an app that hardcodes `http://localhost:3000` — the
  *  normal shape of a frontend calling its API — reaches nothing when the
  *  editor had to bind 3001 instead, and nothing on screen explains why. */
-export function describeRemap(requestedPort: number, resolved: { authority: string; scheme: string }): string | null {
+export interface Remap {
+  /** `port` is one port moving; `hosted` is the editor not binding local ports
+   *  at all, which is the normal state in Codespaces and Remote Tunnels — and
+   *  therefore something to say once, not once per service. */
+  kind: 'port' | 'hosted';
+  text: string;
+}
+
+export function describeRemap(requestedPort: number, resolved: { authority: string; scheme: string }): Remap | null {
   const [host, portText] = splitAuthority(resolved.authority);
   const isLocal = host === 'localhost' || host === '127.0.0.1' || host === '[::1]';
   const port = Number(portText);
 
   if (isLocal && (!portText || port === requestedPort)) return null;
   if (isLocal) {
-    return `is reachable at localhost:${port}, not localhost:${requestedPort}`;
+    return { kind: 'port', text: `is reachable at localhost:${port}, not localhost:${requestedPort}` };
   }
   // Codespaces and Remote Tunnels publish to a hosted address instead of
   // binding a local port at all.
-  return `is published at ${resolved.scheme}://${resolved.authority}, not on a local port`;
+  return { kind: 'hosted', text: `is published at ${resolved.scheme}://${resolved.authority}, not on a local port` };
 }
 
 function splitAuthority(authority: string): [string, string] {
