@@ -296,6 +296,7 @@ export function activate(context: vscode.ExtensionContext): void {
         source: discovery.source,
         configFile: discovery.configFile,
         socketExists: existsSync(discovery.socketPath),
+        info: d === 'connected' ? activeStore.getInfo() : undefined,
       });
       const actions: string[] = [];
       if (d === 'socketMissing') actions.push('Start daemon');

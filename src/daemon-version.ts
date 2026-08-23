@@ -8,18 +8,10 @@
  *  running. A daemon old enough to lack the field is, conveniently, old enough
  *  that saying so is itself informative. */
 export function tooOldMessage(feature: string, minVersion: string, version?: string): string {
-  return version
+  // `'unknown'` is the daemon's own sentinel for "I could not read my own
+  // manifest". Rendering it as a version — "@gachlab/devup unknown" — reads
+  // like a bug in the extension rather than an answer.
+  return version && version !== 'unknown'
     ? `${feature} This one is @gachlab/devup ${version}; it needs ${minVersion} or newer.`
     : `${feature} It needs @gachlab/devup ${minVersion} or newer — this one predates 0.16.0, so it cannot say which it is.`;
-}
-
-/** Whether a daemon advertises an RPC.
- *
- *  `methods` arrived in 0.16.0. An older daemon does not list anything, and
- *  the honest answer is "no idea" rather than "no" — refusing to try would
- *  break the extension against every daemon released so far. `undefined` means
- *  go ahead and find out the old way, from the error. */
-export function daemonHasMethod(method: string, methods?: string[]): boolean | undefined {
-  if (!methods) return undefined;
-  return methods.includes(method);
 }

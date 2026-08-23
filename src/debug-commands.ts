@@ -83,7 +83,6 @@ async function ensureInspector(
     // and its refusal ("does not run node") is the better message.
     await sendRpc(socketPath(), 'debug', { svc: svcName, enable: true },
       { timeoutMs: DEBUG_RPC_TIMEOUT_MS }),
-    store,
   );
   if (!attempt.ok) return null;
   const result = attempt.value;
@@ -371,7 +370,6 @@ export function registerDebugCommands(
       const attempt = await withProgress(`devup: restarting "${svcName}" without the inspector…`, async () =>
         await sendRpc(socketPath(), 'debug', { svc: svcName, enable: false },
           { timeoutMs: DEBUG_RPC_TIMEOUT_MS }),
-        store,
       );
       if (!attempt.ok) return;
       const result = attempt.value;
@@ -390,13 +388,7 @@ export function registerDebugCommands(
 /** Runs the debug RPC behind a progress notification. Reports failure to the
  *  user and says so in the return, rather than handing back a value the caller
  *  has to tell apart from a legitimate one. */
-async function withProgress(
-  title: string,
-  run: () => Promise<unknown>,
-  /** The daemon's own account of itself, for the "too old" message. Optional
-   *  so a caller without a store still gets the generic wording. */
-  store?: StatusStore,
-): Promise<Attempt<DebugResult>> {
+async function withProgress(title: string, run: () => Promise<unknown>): Promise<Attempt<DebugResult>> {
   try {
     const value = await vscode.window.withProgress(
       { location: vscode.ProgressLocation.Notification, title }, run,
@@ -412,14 +404,17 @@ async function withProgress(
     // user could act on.
     void vscode.window.showErrorMessage(
       message.includes('unknown method')
-        ? `devup: ${tooOldMessage('this daemon cannot start a service under the inspector.', '0.14.0', store?.getInfo().version)}`
+        // No version to name here, and there never can be: `unknown method:
+        // debug` only comes from a daemon without `debug` in its dispatch
+        // table, which means older than 0.14.0 — and so older than the 0.16.0
+        // that first reported a version at all. `devup: Show connection
+        // details` is where a version-bearing daemon names itself.
+        ? `devup: ${tooOldMessage('this daemon cannot start a service under the inspector.', '0.14.0')}`
         : `devup: ${message}`,
     );
     return { ok: false };
   }
 }
-
-
 
 /** Waits for the inspector port to appear in the status stream.
  *

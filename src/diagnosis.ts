@@ -32,6 +32,15 @@ export type Diagnosis =
    *  starting, or left behind by a crash. */
   | 'noAnswer';
 
+/** The part of the daemon's `info` a report cares about. Structural rather
+ *  than importing `ProjectInfo`, so this module stays free of everything else
+ *  and testable on its own. */
+export interface DaemonReport {
+  version?: string;
+  contract?: number;
+  methods?: string[];
+}
+
 export interface DiagnosisInput {
   /** The store's own tri-state, not a boolean: `connecting` is neither
    *  success nor failure and must not be diagnosed as one. */
@@ -65,6 +74,8 @@ export interface DiagnosisDetail {
   source: DiagnosisInput['source'];
   configFile: string | null;
   socketExists: boolean;
+  /** From the daemon's `info`, when connected. */
+  info?: DaemonReport;
 }
 
 /** The text behind "Show connection details" — everything the extension used
@@ -75,10 +86,34 @@ export function describeDiagnosis(d: Diagnosis, detail: DiagnosisDetail): string
     `Socket: ${detail.socketPath}`,
     `         ${detail.socketExists ? 'exists' : 'not found'}`,
     `Config file: ${detail.configFile ?? 'none found in this workspace'}`,
+    `Daemon: ${describeDaemon(detail.info)}`,
     '',
     EXPLANATION[d],
   ];
   return lines.join('\n');
+}
+
+/** What the daemon says it is, for the diagnostics report.
+ *
+ *  This is where the version earns its keep. Working out which devup was
+ *  actually running used to be most of the work of diagnosing why debugging or
+ *  port forwarding did not behave — the daemon knew perfectly well and had no
+ *  way to say (gachlab/devup#107).
+ *
+ *  A daemon that reports nothing is itself informative: only releases before
+ *  0.16.0 stay silent. */
+export function describeDaemon(info?: DaemonReport): string {
+  if (!info) return 'not connected';
+  const version = usableVersion(info.version);
+  if (!version) return 'connected — older than 0.16.0 (it does not report its version)';
+  const contract = typeof info.contract === 'number' ? `, control-plane contract ${info.contract}` : '';
+  return `@gachlab/devup ${version}${contract}`;
+}
+
+/** The daemon sends the literal string `'unknown'` when it cannot read its own
+ *  manifest. Printing that as a version would be worse than saying nothing. */
+export function usableVersion(version?: string): string | null {
+  return version && version !== 'unknown' ? version : null;
 }
 
 const EXPLANATION: Record<Diagnosis, string> = {
