@@ -189,6 +189,11 @@ function buildTooltip(
   // wants. `crashes` arrives from @gachlab/devup 0.16.0.
   if (svc.restarts)  md.appendMarkdown(`- restarts: ${svc.restarts}\n`);
   if (svc.crashes)   md.appendMarkdown(`- crashes: ${svc.crashes} since the daemon started\n`);
+  // "crashed" alone reads as dead. Saying a retry is queued is the difference
+  // between closing the editor and waiting eight seconds.
+  if (svc.restartPendingIn != null) {
+    md.appendMarkdown(`- restarting in ${Math.max(1, Math.round(svc.restartPendingIn / 1000))}s\n`);
+  }
   const proxy = store.getProxy();
   if (proxy?.active) {
     const route = proxyRouteFor(svc.name, proxy);

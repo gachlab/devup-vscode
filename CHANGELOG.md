@@ -5,6 +5,17 @@ All notable changes to the devup VS Code extension are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.11.0] — 2026-08-24
+
+### Added
+- **Lee la versión del daemon en vez de adivinarla.** `info` reporta `version`, `contract` y `methods` desde `@gachlab/devup` 0.16.0, así que **devup: Show connection details** nombra el daemon: versión y número de contrato. Averiguar qué devup corría era buena parte del trabajo de diagnosticar por qué la depuración o el reenvío de puertos no se comportaban.
+
+  Los tres campos son opcionales: un daemon anterior a 0.16.0 no manda ninguno, y esa ausencia es en sí la respuesta cuando lo que preguntas es qué edad tiene.
+
+- **`crashes` en el tooltip del árbol.** `restarts` es un *presupuesto* que un reinicio manual resetea, así que un servicio con "restarts: 0" puede haber crasheado doce veces — y ese es el número que quiere quien está leyendo.
+
+- **"restarting in 8s"** cuando el daemon dice que hay un reinicio en cola (`restartPendingIn`, desde devup 0.17.0). "crashed" a secas se lee como muerto; saber que va a reintentar es la diferencia entre cerrar el editor y esperar ocho segundos.
+
 ## [0.10.1] — 2026-08-22
 
 ### Fixed

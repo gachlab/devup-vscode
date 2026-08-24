@@ -24,6 +24,13 @@ export interface ServiceSnapshot {
   /** How many times the service has crashed since the daemon started. Only
    *  ever goes up. Present from @gachlab/devup >= 0.16.0. */
   crashes?: number;
+  /** Milliseconds until the queued auto-restart fires, `null` when none is.
+   *
+   *  What separates "out of restart budget" from "seconds from coming back":
+   *  the daemon raises `restarts` to its maximum *before* scheduling the last
+   *  attempt, so `status` and `restarts` together cannot tell them apart.
+   *  Present from @gachlab/devup >= 0.17.0. */
+  restartPendingIn?: number | null;
   crashLog?: string[] | null;
   /** When the current process started, or null when it is not running.
    *  Present from @gachlab/devup >= 0.14.0. */
