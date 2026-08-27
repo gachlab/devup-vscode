@@ -1,8 +1,8 @@
 {
   "name": "devup-vscode",
   "displayName": "devup",
-  "description": "Sidebar tree, status bar, and live logs for @gachlab/devup \u2014 control your dev stack without leaving the editor.",
-  "version": "0.11.0",
+  "description": "Sidebar tree, status bar, and live logs for @gachlab/devup — control your dev stack without leaving the editor.",
+  "version": "0.12.0",
   "publisher": "gachlab",
   "icon": "media/icon.png",
   "galleryBanner": {
@@ -50,7 +50,7 @@
         "devup.projectName": {
           "type": "string",
           "default": "",
-          "description": "Override the devup project name (normally auto-detected from devup.config.*). Used to resolve the control-plane socket at ~/.devup/sock-<name>.sock, and the log folder at ~/.devup/logs/<name>/ \u2014 the latter even when devup.socketPath is set, which otherwise ignores this."
+          "description": "Override the devup project name (normally auto-detected from devup.config.*). Used to resolve the control-plane socket at ~/.devup/sock-<name>.sock, and the log folder at ~/.devup/logs/<name>/ — the latter even when devup.socketPath is set, which otherwise ignores this."
         },
         "devup.socketPath": {
           "type": "string",
@@ -71,7 +71,7 @@
             "off"
           ],
           "enumDescriptions": [
-            "Forward every service port \u2014 default. A web app is useless without the APIs it calls.",
+            "Forward every service port — default. A web app is useless without the APIs it calls.",
             "Forward web service ports only. The frontends load, but their API calls will not resolve.",
             "Stop forwarding new ports. Tunnels already open stay open; close them from the Ports view."
           ],
@@ -86,9 +86,9 @@
             "none"
           ],
           "enumDescriptions": [
-            "Group by service type (APIs / Webs) \u2014 default",
-            "Group by boot phase (phase 0, phase 1, \u2026)",
-            "Flat list \u2014 no grouping"
+            "Group by service type (APIs / Webs) — default",
+            "Group by boot phase (phase 0, phase 1, …)",
+            "Flat list — no grouping"
           ],
           "default": "type",
           "description": "How to group services in the sidebar tree."
@@ -143,7 +143,7 @@
       {
         "id": "devup.debugging",
         "title": "Debug your devup stack",
-        "description": "Attach a debugger to a service without taking it out of devup \u2014 and follow a request from the frontend into the API.",
+        "description": "Attach a debugger to a service without taking it out of devup — and follow a request from the frontend into the API.",
         "when": "true",
         "steps": [
           {
@@ -171,7 +171,7 @@
           {
             "id": "devup.walkthrough.f5",
             "title": "Or just press F5",
-            "description": "One entry per service in the Run and Debug picker, with no launch.json \u2014 and no port written down, because it changes on every restart.\n[Open Run and Debug](command:workbench.view.debug)",
+            "description": "One entry per service in the Run and Debug picker, with no launch.json — and no port written down, because it changes on every restart.\n[Open Run and Debug](command:workbench.view.debug)",
             "media": {
               "markdown": "media/walkthrough/03-f5.md"
             }
@@ -190,7 +190,7 @@
           {
             "id": "devup.walkthrough.stop",
             "title": "Turn it off when you are done",
-            "description": "The --inspect flag lives on the service in the daemon, not in your editor session \u2014 so it outlives both the crash you were chasing and the window you were in.\n[Stop debugging](command:devup.stopDebugging)",
+            "description": "The --inspect flag lives on the service in the daemon, not in your editor session — so it outlives both the crash you were chasing and the window you were in.\n[Stop debugging](command:devup.stopDebugging)",
             "media": {
               "markdown": "media/walkthrough/05-stop.md"
             },
@@ -236,12 +236,12 @@
       },
       {
         "view": "devupServices",
-        "contents": "The socket for this project exists, but the daemon is not answering \u2014 it may still be starting, may be wedged, or the file may be left over from a crash.\n[Restart daemon](command:devup.daemon.restart)\n[Show connection details](command:devup.diagnostics)",
+        "contents": "The socket for this project exists, but the daemon is not answering — it may still be starting, may be wedged, or the file may be left over from a crash.\n[Restart daemon](command:devup.daemon.restart)\n[Show connection details](command:devup.diagnostics)",
         "when": "devup.diagnosis == noAnswer"
       },
       {
         "view": "devupServices",
-        "contents": "The project name could not be read from your devup config, so the socket path was guessed from the folder name \u2014 which matches a running daemon only by coincidence.\n[Set the project name](command:devup.setProjectName)\n[Show connection details](command:devup.diagnostics)",
+        "contents": "The project name could not be read from your devup config, so the socket path was guessed from the folder name — which matches a running daemon only by coincidence.\n[Set the project name](command:devup.setProjectName)\n[Show connection details](command:devup.diagnostics)",
         "when": "devup.diagnosis == guessedName"
       },
       {
@@ -280,13 +280,18 @@
       },
       {
         "command": "devup.tailLogs",
-        "title": "devup: Tail logs for a service\u2026",
+        "title": "devup: Tail logs for a service…",
         "icon": "$(output)"
       },
       {
         "command": "devup.restart",
         "title": "devup: Restart service",
         "icon": "$(refresh)"
+      },
+      {
+        "command": "devup.bringLocal",
+        "title": "devup: Bring service back to local",
+        "icon": "$(desktop-download)"
       },
       {
         "command": "devup.stop",
@@ -370,7 +375,7 @@
       },
       {
         "command": "devup.closeForwardedPorts",
-        "title": "devup: Close forwarded ports\u2026",
+        "title": "devup: Close forwarded ports…",
         "icon": "$(plug)"
       },
       {
@@ -380,7 +385,7 @@
       },
       {
         "command": "devup.setProjectName",
-        "title": "devup: Set the project name\u2026",
+        "title": "devup: Set the project name…",
         "icon": "$(edit)"
       }
     ],
@@ -445,7 +450,12 @@
         },
         {
           "command": "devup.restart",
-          "when": "view == devupServices && viewItem =~ /service-/",
+          "when": "view == devupServices && viewItem =~ /^(debug-)?service-/",
+          "group": "inline@3"
+        },
+        {
+          "command": "devup.bringLocal",
+          "when": "view == devupServices && viewItem =~ /remote-service-/",
           "group": "inline@3"
         },
         {
@@ -455,7 +465,7 @@
         },
         {
           "command": "devup.openInBrowser",
-          "when": "view == devupServices && viewItem =~ /^(debug-)?service-web$/",
+          "when": "view == devupServices && viewItem =~ /^(debug-)?(remote-)?service-web$/",
           "group": "1_actions@2"
         },
         {
@@ -465,12 +475,12 @@
         },
         {
           "command": "devup.restart",
-          "when": "view == devupServices && viewItem =~ /service-/",
+          "when": "view == devupServices && viewItem =~ /^(debug-)?service-/",
           "group": "1_actions@4"
         },
         {
           "command": "devup.stop",
-          "when": "view == devupServices && viewItem =~ /service-/",
+          "when": "view == devupServices && viewItem =~ /^(debug-)?service-/",
           "group": "1_actions@5"
         },
         {
@@ -480,12 +490,12 @@
         },
         {
           "command": "devup.debugService",
-          "when": "view == devupServices && viewItem =~ /service-/",
+          "when": "view == devupServices && viewItem =~ /^(debug-)?service-/",
           "group": "1_actions@7"
         },
         {
           "command": "devup.stopDebugging",
-          "when": "view == devupServices && viewItem =~ /^debug-service-/",
+          "when": "view == devupServices && viewItem =~ /^debug-(remote-)?service-/",
           "group": "1_actions@8"
         },
         {
@@ -497,6 +507,11 @@
           "command": "devup.openLogFile",
           "when": "view == devupServices && viewItem =~ /service-/",
           "group": "2_share@2"
+        },
+        {
+          "command": "devup.bringLocal",
+          "when": "view == devupServices && viewItem =~ /remote-service-/",
+          "group": "1_actions@4"
         }
       ]
     }

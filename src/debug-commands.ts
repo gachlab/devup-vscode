@@ -10,6 +10,7 @@ import {
 } from './debug-config.js';
 import { buildServiceUrl } from './url-builder.js';
 import { canonicalPort } from './forward-logic.js';
+import { canAttachDebugger, debugPickDescription } from './remote-logic.js';
 
 /** Debugging a service used to mean stopping it in devup, running it by hand
  *  outside, and giving up watch, health checks and restarts while you did
@@ -244,6 +245,21 @@ export function registerDebugCommands(
     vscode.commands.registerCommand('devup.debugService', async (arg?: string | Record<string, unknown>) => {
       const svcName = await pickService(arg, store, 'Debug which service?');
       if (!svcName) return;
+
+      // Before anything else: a service served from an environment has no
+      // process here, and never will while it is remote. Starting a debug
+      // session for it ends in a resolver that declines — or, before 0.19.0,
+      // in a daemon that marked it crashed. Offer the way out instead.
+      const target = store.getAll().find(s => s.name === svcName);
+      const verdict = target ? canAttachDebugger(target) : { ok: true };
+      if (!verdict.ok) {
+        const bring = 'Bring it local';
+        const choice = await vscode.window.showWarningMessage(
+          `devup: "${svcName}" is ${verdict.reason}`, bring,
+        );
+        if (choice === bring) await vscode.commands.executeCommand('devup.bringLocal', svcName);
+        return;
+      }
 
       if (attached.has(svcName)) {
         void vscode.window.showInformationMessage(`devup: already debugging "${svcName}".`);
@@ -514,7 +530,7 @@ async function pickService(
   const picked = await vscode.window.showQuickPick(
     all.map(s => ({
       label: s.name,
-      description: typeof s.debugPort === 'number' ? `inspector on :${s.debugPort}` : (s.cmd ?? s.type),
+      description: debugPickDescription(s),
       svc: s.name,
     })),
     { placeHolder: prompt },

@@ -1,6 +1,7 @@
 import * as vscode from 'vscode';
 import { openStream, type Subscription, type StreamFrame } from './socket-client.js';
 import type { StatusStore, ServiceSnapshot } from './status-store.js';
+import { errorsLabel, remoteBannerText, remoteOf } from './remote-logic.js';
 import { canonicalPort } from './forward-logic.js';
 
 /** One webview panel per service. Re-opens focus an existing panel instead
@@ -20,7 +21,7 @@ export class ServiceDetailPanels implements vscode.Disposable {
     this.storeSub = store.onDidChange(() => {
       for (const [name, panel] of this.panels) {
         const svc = store.getAll().find(s => s.name === name);
-        if (svc) void panel.webview.postMessage({ type: 'svc', svc, port: canonicalPort(svc) });
+        if (svc) void panel.webview.postMessage({ type: 'svc', svc, port: canonicalPort(svc), ...remoteFields(svc) });
       }
     });
   }
@@ -50,6 +51,7 @@ export class ServiceDetailPanels implements vscode.Disposable {
     panel.webview.onDidReceiveMessage((msg: { type: string; payload?: unknown }) => {
       switch (msg.type) {
         case 'restart':       void vscode.commands.executeCommand('devup.restart', svcName); break;
+        case 'bringLocal':    void vscode.commands.executeCommand('devup.bringLocal', svcName); break;
         case 'stop':          void vscode.commands.executeCommand('devup.stop', svcName); break;
         case 'tailLogs':      void vscode.commands.executeCommand('devup.tailLogs', svcName); break;
         case 'openInBrowser': void vscode.commands.executeCommand('devup.openInBrowser', svcName); break;
@@ -69,7 +71,7 @@ export class ServiceDetailPanels implements vscode.Disposable {
     this.panels.set(svcName, panel);
 
     // Push current service state immediately so the panel doesn't sit empty.
-    void panel.webview.postMessage({ type: 'svc', svc, port: canonicalPort(svc) });
+    void panel.webview.postMessage({ type: 'svc', svc, port: canonicalPort(svc), ...remoteFields(svc) });
   }
 
   /** Re-open every panel's log stream against the current socket path. */
@@ -115,6 +117,15 @@ function renderHtml(svc: ServiceSnapshot): string {
   body { font-family: var(--vscode-font-family); color: var(--vscode-foreground); background: var(--vscode-editor-background); padding: 16px; margin: 0; }
   h1 { margin: 0 0 4px; font-size: 1.4em; font-weight: 600; }
   .sub { color: var(--vscode-descriptionForeground); margin-bottom: 16px; font-size: 0.9em; }
+  /* Editor-theme colours, not literals: a panel that ignores the theme reads
+     as a foreign window, and the warning tokens already mean "careful" to
+     anyone using this editor. */
+  .banner {
+    margin-bottom: 16px; padding: 8px 10px; border-radius: 3px; font-size: 0.9em;
+    background: var(--vscode-inputValidation-warningBackground);
+    border: 1px solid var(--vscode-inputValidation-warningBorder);
+    color: var(--vscode-foreground);
+  }
   .badge { display: inline-block; padding: 2px 8px; border-radius: 10px; font-size: 0.8em; font-weight: 600; margin-right: 6px; }
   .badge.up      { background: var(--vscode-testing-iconPassed); color: white; }
   .badge.down    { background: var(--vscode-testing-iconFailed); color: white; }
@@ -138,6 +149,10 @@ function renderHtml(svc: ServiceSnapshot): string {
   <h1 id="name">${escapeHtml(svc.name)}</h1>
   <div class="sub">${escapeHtml(svc.type)} · :${canonicalPort(svc)}</div>
 
+  <div id="remote-banner" class="banner"${svc.remote ? '' : ' style="display:none"'}>${
+    svc.remote ? escapeHtml(remoteBannerText(svc.remote)) : ''
+  }</div>
+
   <div id="status-row">
     <span class="badge ${cssClass(svc.status)}" id="status-badge">${escapeHtml(svc.status)}</span>
     <span class="badge ${cssClass(svc.health)}" id="health-badge">${escapeHtml(svc.health)}</span>
@@ -147,13 +162,14 @@ function renderHtml(svc: ServiceSnapshot): string {
     <dt>Port</dt><dd id="port">${canonicalPort(svc)}</dd>
     <dt>Type</dt><dd id="type">${escapeHtml(svc.type)}</dd>
     <dt>PID</dt><dd id="pid">${svc.pid ?? '—'}</dd>
-    <dt>Errors</dt><dd id="errors">${svc.errors}</dd>
+    <dt id="errors-label">${escapeHtml(capitalise(errorsLabel(svc)))}</dt><dd id="errors">${svc.errors}</dd>
     <dt>Restarts</dt><dd id="restarts">${svc.restarts}</dd>
   </dl>
 
   <div class="actions">
-    <button id="btn-restart">Restart</button>
-    <button id="btn-stop" class="secondary">Stop</button>
+    <button id="btn-local"${svc.remote ? '' : ' style="display:none"'}>Bring local</button>
+    <button id="btn-restart"${svc.remote ? ' style="display:none"' : ''}>Restart</button>
+    <button id="btn-stop" class="secondary"${svc.remote ? ' style="display:none"' : ''}>Stop</button>
     <button id="btn-tail" class="secondary">Tail logs</button>
     <button id="btn-terminal" class="secondary">Open terminal</button>
     ${svc.type === 'web' ? '<button id="btn-open" class="secondary">Open in browser</button>' : ''}
@@ -187,6 +203,7 @@ function renderHtml(svc: ServiceSnapshot): string {
 
   <script nonce="${nonce}">
     const vscode = acquireVsCodeApi();
+    document.getElementById('btn-local').addEventListener('click',   () => vscode.postMessage({ type: 'bringLocal' }));
     document.getElementById('btn-restart').addEventListener('click', () => vscode.postMessage({ type: 'restart' }));
     document.getElementById('btn-stop').addEventListener('click',    () => vscode.postMessage({ type: 'stop' }));
     document.getElementById('btn-tail').addEventListener('click',    () => vscode.postMessage({ type: 'tailLogs' }));
@@ -242,6 +259,20 @@ function renderHtml(svc: ServiceSnapshot): string {
         if (portEl && m.port) portEl.textContent = m.port;
         document.getElementById('pid').textContent      = s.pid ?? '—';
         document.getElementById('errors').textContent   = s.errors;
+        // A service can move between local and an environment while this
+        // panel is open — the panel's own button does it — so every one of
+        // these has to follow, not just be right on first render.
+        const banner = document.getElementById('remote-banner');
+        if (banner) {
+          banner.textContent = m.remoteBanner ?? '';
+          banner.style.display = m.remoteBanner ? '' : 'none';
+        }
+        const errorsLabelEl = document.getElementById('errors-label');
+        if (errorsLabelEl && m.errorsLabel) errorsLabelEl.textContent = m.errorsLabel;
+        for (const [id, showWhenRemote] of [['btn-local', true], ['btn-restart', false], ['btn-stop', false]]) {
+          const el = document.getElementById(id);
+          if (el) el.style.display = (!!m.remoteBanner === showWhenRemote) ? '' : 'none';
+        }
         document.getElementById('restarts').textContent = s.restarts;
         // Update crash log section
         const crashSection = document.getElementById('crash-section');
@@ -272,4 +303,21 @@ function randomNonce(): string {
   const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
   for (let i = 0; i < 32; i++) out += chars[Math.floor(Math.random() * chars.length)];
   return out;
+}
+
+
+/** The two fields the panel derives from `remote`, computed here rather than
+ *  in the webview: the banner text and the label `errors` deserves. Sent on
+ *  every update because a service can move between local and an environment
+ *  while the panel is open — its own button does exactly that. */
+function remoteFields(svc: ServiceSnapshot): { remoteBanner: string | null; errorsLabel: string } {
+  const remote = remoteOf(svc);
+  return {
+    remoteBanner: remote ? remoteBannerText(remote) : null,
+    errorsLabel: capitalise(errorsLabel(svc)),
+  };
+}
+
+function capitalise(s: string): string {
+  return s.charAt(0).toUpperCase() + s.slice(1);
 }

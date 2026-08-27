@@ -9,6 +9,14 @@ import { canonicalPort } from './forward-logic.js';
 import type { LogChannels } from './log-channels.js';
 
 import { extractSvcName } from './svc-name.js';
+import { actionOutcome, supportsRemoteSwitch } from './remote-logic.js';
+import type { RemoteResult, StartResult } from './types.js';
+
+/** A switch back to local spawns the process and waits for its port, which
+ *  includes whatever a `preBuild` costs. The default RPC timeout is far too
+ *  short for that, and timing out here would report a failure for a switch
+ *  that is going to succeed. */
+const REMOTE_SWITCH_TIMEOUT_MS = 120_000;
 export { extractSvcName };
 
 type ServiceArg = string | Record<string, unknown> | undefined;
@@ -47,11 +55,56 @@ export function registerServiceCommands(
       const svc = await resolveServiceName(arg, store, 'Restart which service?');
       if (!svc) return;
       try {
-        await sendRpc(socketPath(), 'restart', { svc });
-        void vscode.window.showInformationMessage(`devup: restart sent to "${svc}"`);
+        const res = await sendRpc(socketPath(), 'restart', { svc }) as StartResult;
+        // The daemon answers `ok: true` for a service it did not restart
+        // because there is no process here — see `actionOutcome`. Reading only
+        // `ok` would report a restart that never happened. The snapshot is the
+        // fallback for a daemon too old to say so itself.
+        const outcome = actionOutcome('restart', svc, res, store.getAll().find(s => s.name === svc));
+        if (outcome.kind === 'skipped') void vscode.window.showWarningMessage(outcome.message);
+        else if (outcome.kind === 'failed') void vscode.window.showErrorMessage(outcome.message);
+        else void vscode.window.showInformationMessage(outcome.message);
       } catch (e) {
         void vscode.window.showErrorMessage(`devup: restart failed — ${rpcMessage(e)}`);
       }
+    }),
+
+    vscode.commands.registerCommand('devup.bringLocal', async (arg?: ServiceArg) => {
+      const svc = await resolveServiceName(arg, store, 'Bring which service back to local?');
+      if (!svc) return;
+      const info = store.getAll().find(s => s.name === svc);
+      if (info && !info.remote) {
+        void vscode.window.showInformationMessage(`devup: "${svc}" is already running locally.`);
+        return;
+      }
+      if (!supportsRemoteSwitch(store.getInfo()?.contract)) {
+        void vscode.window.showWarningMessage(
+          `devup: this daemon cannot move services between local and an environment — upgrade @gachlab/devup to 0.18.0 or later.`,
+        );
+        return;
+      }
+      // Starting a service can take as long as its `preBuild`, so this is a
+      // notification rather than a fire-and-forget: without it the sidebar
+      // sits unchanged for a minute and the click reads as ignored.
+      await vscode.window.withProgress(
+        { location: vscode.ProgressLocation.Notification, title: `devup: bringing "${svc}" local…` },
+        async () => {
+          try {
+            const res = await sendRpc(socketPath(), 'remote', { svc, local: true },
+              { timeoutMs: REMOTE_SWITCH_TIMEOUT_MS }) as RemoteResult;
+            // A refusal comes back as a result, not as an RPC error: an
+            // unknown environment, a port still held by a process that has not
+            // finished draining. All facts worth showing as themselves.
+            if (!res.ok) {
+              void vscode.window.showErrorMessage(`devup: could not bring "${svc}" local — ${res.error ?? 'unknown reason'}`);
+              return;
+            }
+            void vscode.window.showInformationMessage(`devup: "${svc}" is running locally.`);
+          } catch (e) {
+            void vscode.window.showErrorMessage(`devup: could not bring "${svc}" local — ${rpcMessage(e)}`);
+          }
+        },
+      );
     }),
 
     vscode.commands.registerCommand('devup.stop', async (arg?: ServiceArg) => {

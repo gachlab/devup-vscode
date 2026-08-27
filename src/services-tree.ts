@@ -3,6 +3,9 @@ import type { StatusStore, ServiceSnapshot } from './status-store.js';
 import { buildServiceUrl, describeProxy, formatCpu, formatMem, proxyRouteFor } from './url-builder.js';
 import type { PortForwarder } from './port-forward.js';
 import { buildPhaseGroups } from './tree-logic.js';
+import {
+  errorsLabel, remoteOf, remoteTooltipLines, serviceContextValue, serviceStatusText,
+} from './remote-logic.js';
 import { canonicalPort } from './forward-logic.js';
 export { buildPhaseGroups };
 
@@ -128,12 +131,12 @@ function serviceItem(svc: ServiceSnapshot, store: StatusStore, forwarder?: PortF
     ? (forwarder.isPaused() ? '  · forwarding paused' : '  · forwarded')
     : '';
   const debugging = typeof svc.debugPort === 'number' ? `  · debug :${svc.debugPort}` : '';
-  item.description = `:${canonicalPort(svc)}  ${svc.status}/${svc.health}${statsStr}${forwarded}${debugging}`;
+  item.description = `:${canonicalPort(svc)}  ${serviceStatusText(svc)}${statsStr}${forwarded}${debugging}`;
   item.iconPath = stats ? resourceIcon(svc, stats) : healthIcon(svc);
   // A prefix rather than a suffix, so the menu clauses can anchor on it
   // without a lookahead — and so every existing unanchored `/service-/` clause
   // keeps matching a service that happens to be under the inspector.
-  item.contextValue = `${debugging ? 'debug-' : ''}service-${svc.type}`;
+  item.contextValue = serviceContextValue(svc);
   item.command = { command: 'devup.tailLogs', title: 'Tail logs', arguments: [svc.name] };
   item.tooltip = buildTooltip(svc, stats, store, !!forwarded);
   return item;
@@ -156,6 +159,14 @@ function resourceIcon(svc: ServiceSnapshot, stats: import('./status-store.js').S
 }
 
 function healthIcon(svc: ServiceSnapshot): vscode.ThemeIcon {
+  // A different glyph, keeping the health colour: whether the environment is
+  // answering is still what the icon reports, and a marker that discarded it
+  // would trade one fact for another instead of adding one.
+  if (svc.remote) {
+    if (svc.health === 'up') return new vscode.ThemeIcon('globe', new vscode.ThemeColor('charts.green'));
+    if (svc.health === 'wait') return new vscode.ThemeIcon('globe', new vscode.ThemeColor('charts.yellow'));
+    return new vscode.ThemeIcon('globe', new vscode.ThemeColor('charts.red'));
+  }
   if (svc.status === 'crashed') return new vscode.ThemeIcon('error', new vscode.ThemeColor('charts.red'));
   if (svc.status === 'idle')    return new vscode.ThemeIcon('circle-outline');
   if (svc.health === 'up')      return new vscode.ThemeIcon('pass', new vscode.ThemeColor('charts.green'));
@@ -171,6 +182,10 @@ function buildTooltip(
 ): vscode.MarkdownString {
   const md = new vscode.MarkdownString();
   md.appendMarkdown(`**${svc.name}**\n\n`);
+  const remote = remoteOf(svc);
+  // First, above the ports and the counters: for most of these a request made
+  // from this machine changes data in a system other people are looking at.
+  if (remote) for (const line of remoteTooltipLines(remote)) md.appendMarkdown(`- ${line}\n`);
   md.appendMarkdown(`- port: ${canonicalPort(svc)}\n`);
   // Surface the lazy rewrite rather than hiding it: useful when attaching a
   // debugger or reading logs, where the service's own port is what shows up.
@@ -182,7 +197,10 @@ function buildTooltip(
     md.appendMarkdown(`- inspector: 127.0.0.1:${svc.debugPort} — the port changes on every restart\n`);
   }
   if (svc.pid != null) md.appendMarkdown(`- pid: ${svc.pid}\n`);
-  if (svc.errors)    md.appendMarkdown(`- errors: ${svc.errors}\n`);
+  // The same number means two different things — see `errorsLabel`. On a
+  // local service it counts stderr lines and points at the service; on a
+  // remote one it counts requests that never reached the environment.
+  if (svc.errors)    md.appendMarkdown(`- ${errorsLabel(svc)}: ${svc.errors}\n`);
   // Both, when they disagree. `restarts` is the auto-restart *budget* and a
   // manual restart resets it, so a service showing "restarts: 0" can have
   // crashed a dozen times — which is the number someone reading this actually

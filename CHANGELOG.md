@@ -5,6 +5,28 @@ All notable changes to the devup VS Code extension are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.12.0] — 2026-08-27
+
+Servicios remotos: `@gachlab/devup` 0.18.0 sirve un servicio que no corre local
+reenviando su puerto a un ambiente (QA, staging). Sin este cambio la extensión
+lo pintaba como un servicio corriendo normal — cierto en substancia, engañoso
+en tres detalles que un usuario nota.
+
+### Added
+- **El árbol dice dónde corre y si acepta escrituras.** El estado de un remoto siempre es `running`, así que esa columna se leía igual para todos; va el ambiente en su lugar. `health` se queda, porque para un remoto sí responde algo que varía: si el ambiente contesta. El icono cambia de glifo conservando el color de salud.
+
+  `readOnly` viene apagado por defecto en devup, así que para la mayoría un request hecho desde esta máquina cambia datos que otros están mirando. El aviso va primero en el tooltip, encima de los puertos y los contadores, y en un banner arriba del panel de detalle.
+
+- **`devup: Bring service back to local`**, que es el botón que de verdad sirve para un remoto. Con barra de progreso y timeout de dos minutos: arrancar un servicio cuesta lo que cueste su `preBuild`.
+
+### Fixed
+- **El attach ofrecía depurar algo sin proceso.** El quick-pick se armaba con todo el snapshot, así que un servicio remoto aparecía y el attach no hacía nada. Ahora lleva la razón como descripción y al elegirlo ofrece la salida.
+- **`restart` reportaba un reinicio que nunca ocurrió.** El daemon responde `ok: true` para un servicio que no reinició porque no hay proceso acá; leer solo `ok` era mentira. Lee `skippedRemote` (contract 4) y cae al `remote` del snapshot (contract 3) contra un daemon más viejo.
+- **`errors` se pintaba igual significando otra cosa.** En un remoto cuenta requests que no llegaron al ambiente, no líneas de stderr: mismo número, y otra cosa que hacer al respecto.
+
+### Changed
+- Restart, stop y attach **desaparecen** del menú para un servicio remoto, en vez de estar presentes y no hacer nada.
+
 ## [0.11.0] — 2026-08-24
 
 ### Added
