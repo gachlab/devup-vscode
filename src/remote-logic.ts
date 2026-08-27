@@ -150,3 +150,12 @@ export function debugPickDescription(
   if (typeof svc.debugPort === 'number') return `inspector on :${svc.debugPort}`;
   return svc.cmd ?? svc.type;
 }
+
+/** The banner at the top of the detail panel. Plain text, unlike
+ *  `remoteTooltipLines`, which is markdown for a tooltip. */
+export function remoteBannerText(remote: RemoteInfo): string {
+  const writes = remote.readOnly
+    ? 'Writes are refused (read-only).'
+    : '⚠ Writes from here reach it.';
+  return `Served from ${remote.envName} — ${remote.target}. ${writes} No local process.`;
+}

@@ -2,7 +2,7 @@ import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import {
   actionOutcome, canAttachDebugger, debugPickDescription, errorsLabel, remoteDescription,
-  remoteOf, remoteTooltipLines, reportsSkippedRemote, serviceContextValue,
+  remoteBannerText, remoteOf, remoteTooltipLines, reportsSkippedRemote, serviceContextValue,
   serviceStatusText, supportsRemoteSwitch,
 } from '../../src/remote-logic.js';
 import type { RemoteInfo } from '../../src/types.js';
@@ -217,5 +217,24 @@ describe('debugPickDescription', () => {
     assert.match(d, /served from qa/);
     assert.match(d, /Bring it local/);
     assert.ok(!/node/.test(d), d);
+  });
+});
+
+describe('remoteBannerText', () => {
+  it('names the environment, the target and what writes do', () => {
+    const t = remoteBannerText(qa);
+    assert.match(t, /Served from qa/);
+    assert.match(t, /https:\/\/app-api\.qa\.norelian\.com/);
+    assert.match(t, /Writes from here reach it/);
+  });
+
+  it('says writes are refused for a read-only environment', () => {
+    const t = remoteBannerText(qaRo);
+    assert.match(t, /read-only/);
+    assert.ok(!/Writes from here reach it/.test(t), t);
+  });
+
+  it('carries no markdown — the panel is HTML, not a tooltip', () => {
+    assert.ok(!/\*\*/.test(remoteBannerText(qa)));
   });
 });
