@@ -135,3 +135,18 @@ export function serviceContextValue(
   const remote = remoteOf(svc) ? 'remote-' : '';
   return `${debugging}${remote}service-${svc.type}`;
 }
+
+/** The line under a service's name in the debug picker.
+ *
+ *  A remote service is kept in the list rather than filtered out, and carries
+ *  its reason here. Removing it would leave someone looking for a service that
+ *  is plainly in the sidebar and wondering where it went; the reason says both
+ *  why it is not available and what to do about it. */
+export function debugPickDescription(
+  svc: Pick<ServiceSnapshot, 'remote' | 'debugPort' | 'cmd' | 'type' | 'name'>,
+): string {
+  const verdict = canAttachDebugger(svc);
+  if (!verdict.ok) return verdict.reason!;
+  if (typeof svc.debugPort === 'number') return `inspector on :${svc.debugPort}`;
+  return svc.cmd ?? svc.type;
+}

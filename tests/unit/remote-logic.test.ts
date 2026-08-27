@@ -1,7 +1,7 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  actionOutcome, canAttachDebugger, errorsLabel, remoteDescription,
+  actionOutcome, canAttachDebugger, debugPickDescription, errorsLabel, remoteDescription,
   remoteOf, remoteTooltipLines, reportsSkippedRemote, serviceContextValue,
   serviceStatusText, supportsRemoteSwitch,
 } from '../../src/remote-logic.js';
@@ -196,5 +196,26 @@ describe('serviceContextValue', () => {
     ]) {
       assert.match(v, /service-/);
     }
+  });
+});
+
+describe('debugPickDescription', () => {
+  it('shows the inspector port when there is one', () => {
+    assert.equal(debugPickDescription({ name: 'a', type: 'api', debugPort: 39481 }), 'inspector on :39481');
+  });
+
+  it('falls back to the command, then to the type', () => {
+    assert.equal(debugPickDescription({ name: 'a', type: 'api', cmd: 'node' }), 'node');
+    assert.equal(debugPickDescription({ name: 'a', type: 'web' }), 'web');
+  });
+
+  it('replaces all of that with the reason for a remote service', () => {
+    // Kept in the list rather than filtered out: removing it leaves someone
+    // hunting for a service that is plainly in the sidebar. The reason says
+    // both why it is unavailable and what to do about it.
+    const d = debugPickDescription({ name: 'a', type: 'api', cmd: 'node', remote: qa });
+    assert.match(d, /served from qa/);
+    assert.match(d, /Bring it local/);
+    assert.ok(!/node/.test(d), d);
   });
 });
