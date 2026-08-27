@@ -40,6 +40,69 @@ export interface ServiceSnapshot {
    *  differs on every restart. Null when the service is not being debugged, and
    *  briefly while it is starting. Present from @gachlab/devup >= 0.14.0. */
   debugPort?: number | null;
+  /** Set when the service is **not a local process**: devup holds its
+   *  configured port and forwards to a remote environment. Absent, or null,
+   *  for an ordinary service. Present from @gachlab/devup >= 0.18.0 —
+   *  `contract >= 3`.
+   *
+   *  Three things follow that nothing else in the snapshot says:
+   *
+   *  - `pid` is null and stays null, so there is no inspector to attach to.
+   *  - the service is **absent from `stats`** — no process to sample, which is
+   *    not the same as 0% CPU.
+   *  - `errors` counts requests that never reached the environment, not
+   *    stderr lines. A 500 that came back is the service's own business.
+   *
+   *  It is an added field rather than a new `status` value on purpose: a
+   *  remote service reports `status: 'running'`, so a client that has never
+   *  heard of this renders it as the running service it is. */
+  remote?: RemoteInfo | null;
+}
+
+export interface RemoteInfo {
+  /** Which entry of the project's `environments` block serves it. */
+  envName: string;
+  /** Absolute upstream base, e.g. `https://check-in-api.qa.norelian.com`. */
+  target: string;
+  /** Whether devup refuses writes to it with 405. **False by default**, so for
+   *  most remote services a request made from this machine changes data in a
+   *  shared environment. */
+  readOnly: boolean;
+}
+
+/** The `start` / `restart` result.
+ *
+ *  `skippedRemote` is present from @gachlab/devup >= 0.19.0 (`contract >= 4`)
+ *  and names the environment when there was no process here to act on. It
+ *  arrives with `ok: true`, because the service *is* answering — devup simply
+ *  spawned nothing. Rendering that as "restarted" claims something that did
+ *  not happen. */
+export interface StartResult {
+  ok: boolean;
+  skippedIdle?: boolean;
+  skippedRemote?: string;
+}
+
+/** The `debug` result. Unlike a restart, `ok` is **false** when the service is
+ *  remote: the inspector runs inside a process, and the process is elsewhere. */
+export interface DebugResult {
+  debug: boolean;
+  port: number | null;
+  ok: boolean;
+  skippedRemote?: string;
+}
+
+/** The `remote` result — the RPC that moves a service between local and an
+ *  environment. Present from @gachlab/devup >= 0.18.0.
+ *
+ *  Failures arrive as `ok: false` with a reason rather than as an RPC error:
+ *  an unknown environment, a service the environment cannot reach, a port
+ *  still held by a process that has not finished draining. All facts about the
+ *  stack worth showing. */
+export interface RemoteResult {
+  ok: boolean;
+  remote: RemoteInfo | null;
+  error?: string;
 }
 
 export interface ProjectInfo {
